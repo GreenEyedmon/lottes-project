@@ -51,6 +51,13 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # Apply any pending D1 migrations before the new Worker goes live, so schema
+      # changes are in place before the code that depends on them.
+      - run: pnpm run db:migrate
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
       # `pnpm run deploy` runs `pnpm build && wrangler deploy`. (Bare `pnpm deploy`
       # is pnpm's built-in workspace-deploy command, not this script.) Wrangler
       # reads both credentials from the environment, so no token touches the repo.
