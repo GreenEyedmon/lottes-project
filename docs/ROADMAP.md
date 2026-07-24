@@ -134,13 +134,23 @@ nobody abandons the app from overload.
 ### Phase 3 — Adaptive scheduling  *(spec §14 Phase 3)*
 
 **Goal:** Use accumulated behavior to *suggest* improvements — explainable and
-user-approved, never automatic.
+user-approved, never automatic. Scoped in
+[docs/design/adaptive-scheduling.md](design/adaptive-scheduling.md).
 
-- Behavior-driven suggestions: more realistic frequencies (from postpone patterns),
-  better days, better reminder times, fairer rotations.
-- **Frequency-target recurrence mode** can land here (the third mode deferred from
-  Phase 0), powering flexible "twice a week" placement.
-- Every recommendation is explainable and requires user approval.
+Full-spec scope; suggestions surface **inline on the chore** they concern:
+
+- **(3a) Infrastructure + frequency-fit suggestions** — `suggestions` table, pure
+  analyzer, weekly generation cron, `applyTemplateChange` helper, accept/dismiss,
+  inline 💡 on the chore row. (Signals already captured: postpones, late/early.)
+- **(3b) Day & time suggestions** — better weekday, due time, and reminder time from
+  observed completion instants.
+- **(3c) Rotation-fairness suggestions** — enable/reorder rotation from who actually
+  does the work (`by_non_assignee` + tally).
+- **(3d) `frequencyTarget` recurrence mode** — the third mode deferred from Phase 0;
+  flexible "~2×/week" placement. Pure engine work, independent of 3a–3c.
+
+Guardrails: analyzer stays pure + hard-tested; signals gathered with aggregate
+queries (well under the D1 50-query cap); no external ML — deterministic and local.
 
 **Exit:** the app proposes schedule improvements; the user stays in control.
 
