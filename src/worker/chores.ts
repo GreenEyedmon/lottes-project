@@ -156,7 +156,7 @@ export async function completeOccurrence(
   occurrenceId: string,
   memberId: string,
   now: number,
-): Promise<'ok' | 'not-found'> {
+): Promise<'ok' | 'not-found' | 'not-due'> {
   const [row] = await db
     .select()
     .from(choreOccurrences)
@@ -164,6 +164,11 @@ export async function completeOccurrence(
     .limit(1)
   if (!row || row.householdId !== householdId) return 'not-found'
   if (row.state !== 'scheduled') return 'ok' // idempotent
+  // Only due/overdue occurrences may be completed — completing a not-yet-due one would
+  // let a recurring chore race ahead of its schedule.
+  if (resolveTemporalStatus(toEngineOccurrence(row), { now, timeZone }) === 'upcoming') {
+    return 'not-due'
+  }
 
   const { event } = applyCompletion(
     toEngineOccurrence(row),

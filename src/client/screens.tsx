@@ -210,13 +210,15 @@ function ChoresSection() {
                 </span>
                 <span className="font-medium">{occ.name}</span>
               </span>
-              <button
-                type="button"
-                onClick={() => complete.mutate(occ.id)}
-                className="btn btn-primary btn-sm"
-              >
-                Done
-              </button>
+              {occ.temporalStatus !== 'upcoming' && (
+                <button
+                  type="button"
+                  onClick={() => complete.mutate(occ.id)}
+                  className="btn btn-primary btn-sm"
+                >
+                  Done
+                </button>
+              )}
             </li>
           ))}
         </ul>

@@ -20,6 +20,11 @@ import { isInviteUsable, newInviteCode } from './invites.ts'
 
 type SessionUser = { id: string; email: string; name: string }
 
+/** A member's display name, falling back to the email's local part when unset. */
+function displayNameFor(user: SessionUser): string {
+  return user.name.trim() || user.email.split('@')[0] || 'Member'
+}
+
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
 export const api = new Hono<{ Bindings: Env; Variables: { user: SessionUser } }>()
@@ -49,7 +54,7 @@ api.post('/households', async (c) => {
     db.insert(members).values({
       id: memberId,
       householdId,
-      displayName: user.name,
+      displayName: displayNameFor(user),
       role: 'owner',
       userId: user.id,
       createdAt: now,
@@ -116,7 +121,7 @@ api.post('/invites/:code/accept', async (c) => {
     db.insert(members).values({
       id: memberId,
       householdId: invite.householdId,
-      displayName: user.name,
+      displayName: displayNameFor(user),
       role: 'member',
       userId: user.id,
       createdAt: now,
@@ -235,5 +240,6 @@ api.post('/occurrences/:id/complete', async (c) => {
     Date.now(),
   )
   if (result === 'not-found') return c.json({ error: 'not found' }, 404)
+  if (result === 'not-due') return c.json({ error: 'not due yet' }, 400)
   return c.json({ ok: true })
 })
