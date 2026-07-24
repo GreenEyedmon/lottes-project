@@ -1,0 +1,15 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "lottes-project",
+  "main": "./src/worker/index.ts",
+  "compatibility_date": "2026-07-23",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    // SPA: unmatched routes fall back to index.html so client-side routing works.
+    "not_found_handling": "single-page-application"
+  },
+  "observability": {
+    "enabled": true
+  }
+  // D1 bindings, cron triggers, and secrets get added once the spec lands.
+}

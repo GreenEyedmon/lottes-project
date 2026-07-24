@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Types are generated, not committed — regenerate before typechecking.
+      - run: pnpm cf-typegen
+
+      - run: pnpm typecheck
+
+      - run: pnpm check:ci
+
+      - run: pnpm test
+
+  # Deploy to Cloudflare only after verify passes, and only on push to main.
+  # Pull requests run verify above but never reach this job.
+  deploy:
+    needs: verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # Never let two deploys run at once; queue instead of cancelling a live deploy.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # `pnpm run deploy` runs `pnpm build && wrangler deploy`. (Bare `pnpm deploy`
+      # is pnpm's built-in workspace-deploy command, not this script.) Wrangler
+      # reads both credentials from the environment, so no token touches the repo.
+      - run: pnpm run deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
