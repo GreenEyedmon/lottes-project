@@ -139,9 +139,9 @@ user-approved, never automatic. Scoped in
 
 Full-spec scope; suggestions surface **inline on the chore** they concern:
 
-- **(3a) Infrastructure + frequency-fit suggestions** — `suggestions` table, pure
+- **(3a) ✅ Infrastructure + frequency-fit suggestions** — `suggestions` table, pure
   analyzer, weekly generation cron, `applyTemplateChange` helper, accept/dismiss,
-  inline 💡 on the chore row. (Signals already captured: postpones, late/early.)
+  inline 💡 on the chore row. (Signals already captured: postpones, late/early.) — PR #15
 - **(3b) Day & time suggestions** — better weekday, due time, and reminder time from
   observed completion instants.
 - **(3c) Rotation-fairness suggestions** — enable/reorder rotation from who actually
