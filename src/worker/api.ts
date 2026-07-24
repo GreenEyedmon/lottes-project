@@ -26,6 +26,7 @@ import { households, invites, members, pushSubscriptions, rooms } from './db/sch
 import { getHistory } from './history.ts'
 import { isInviteUsable, newInviteCode } from './invites.ts'
 import { pushConfigured, sendPush } from './push.ts'
+import { announceActivity } from './reminders.ts'
 
 type SessionUser = { id: string; email: string; name: string }
 
@@ -241,16 +242,20 @@ api.post('/occurrences/:id/complete', async (c) => {
   const user = c.get('user')
   const ctx = await callerContext(c.env, user.id)
   if (!ctx) return c.json({ error: 'no household' }, 404)
+  const db = getDb(c.env.DB)
+  const now = Date.now()
+  const occurrenceId = c.req.param('id')
   const result = await completeOccurrence(
-    getDb(c.env.DB),
+    db,
     ctx.household.id,
     ctx.household.ianaTimeZone,
-    c.req.param('id'),
+    occurrenceId,
     ctx.member.id,
-    Date.now(),
+    now,
   )
   if (result === 'not-found') return c.json({ error: 'not found' }, 404)
   if (result === 'not-due') return c.json({ error: 'not due yet' }, 400)
+  await announceActivity(db, c.env, ctx.household, ctx.member, occurrenceId, 'completed', now)
   return c.json({ ok: true })
 })
 
@@ -274,15 +279,13 @@ api.post('/occurrences/:id/claim', async (c) => {
   const user = c.get('user')
   const ctx = await callerContext(c.env, user.id)
   if (!ctx) return c.json({ error: 'no household' }, 404)
-  const result = await claimOccurrence(
-    getDb(c.env.DB),
-    ctx.household.id,
-    c.req.param('id'),
-    ctx.member.id,
-    Date.now(),
-  )
+  const db = getDb(c.env.DB)
+  const now = Date.now()
+  const occurrenceId = c.req.param('id')
+  const result = await claimOccurrence(db, ctx.household.id, occurrenceId, ctx.member.id, now)
   if (result === 'not-found') return c.json({ error: 'not found' }, 404)
   if (result === 'taken') return c.json({ error: 'already claimed' }, 409)
+  await announceActivity(db, c.env, ctx.household, ctx.member, occurrenceId, 'claimed', now)
   return c.json({ ok: true })
 })
 
@@ -395,15 +398,23 @@ api.post('/households/:id/settings', async (c) => {
     digestHour?: number
     quietStartHour?: number
     quietEndHour?: number
+    remindersEnabled?: boolean
+    digestEnabled?: boolean
+    activityEnabled?: boolean
   }>()
   const clampHour = (value: number | undefined, fallback: number): number =>
     typeof value === 'number' && value >= 0 && value <= 23 ? Math.floor(value) : fallback
+  const bool = (value: boolean | undefined, fallback: boolean): boolean =>
+    typeof value === 'boolean' ? value : fallback
   await getDb(c.env.DB)
     .update(households)
     .set({
       digestHour: clampHour(body.digestHour, ctx.household.digestHour),
       quietStartHour: clampHour(body.quietStartHour, ctx.household.quietStartHour),
       quietEndHour: clampHour(body.quietEndHour, ctx.household.quietEndHour),
+      remindersEnabled: bool(body.remindersEnabled, ctx.household.remindersEnabled),
+      digestEnabled: bool(body.digestEnabled, ctx.household.digestEnabled),
+      activityEnabled: bool(body.activityEnabled, ctx.household.activityEnabled),
     })
     .where(eq(households.id, ctx.household.id))
   return c.json({ ok: true })

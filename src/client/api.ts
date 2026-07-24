@@ -10,6 +10,9 @@ export interface HouseholdView {
     digestHour: number
     quietStartHour: number
     quietEndHour: number
+    remindersEnabled: boolean
+    digestEnabled: boolean
+    activityEnabled: boolean
   }
   me: { id: string; displayName: string; role: string }
   members: { id: string; displayName: string; role: string }[]
@@ -122,6 +125,9 @@ export interface NotificationSettings {
   digestHour: number
   quietStartHour: number
   quietEndHour: number
+  remindersEnabled: boolean
+  digestEnabled: boolean
+  activityEnabled: boolean
 }
 
 export function updateSettings(

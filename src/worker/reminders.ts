@@ -105,6 +105,52 @@ async function notifyHousehold(
   for (const member of mems) await notifyMember(db, env, member.id, notification)
 }
 
+/**
+ * Announce a member's action ("Alex completed Vacuum") to the rest of the household.
+ * Opt-in per household (`activityEnabled`) and suppressed during quiet hours; the actor
+ * never gets pinged about their own action. Called immediately from the action's request
+ * path, not the cron — the in-app activity feed records it regardless of this switch.
+ */
+export async function announceActivity(
+  db: Db,
+  env: Env,
+  household: HouseholdRow,
+  actor: { id: string; displayName: string },
+  occurrenceId: string,
+  verb: string,
+  now: number,
+): Promise<void> {
+  if (!household.activityEnabled) return
+  const localHour = zonedPartsFromInstant(now, household.ianaTimeZone).hour
+  if (inQuietHours(localHour, household.quietStartHour, household.quietEndHour)) return
+
+  const [occ] = await db
+    .select({ title: choreOccurrences.title, templateId: choreOccurrences.templateId })
+    .from(choreOccurrences)
+    .where(eq(choreOccurrences.id, occurrenceId))
+    .limit(1)
+  if (!occ) return
+  let name = occ.title ?? 'a chore'
+  if (occ.templateId) {
+    const [template] = await db
+      .select({ name: choreTemplates.name })
+      .from(choreTemplates)
+      .where(eq(choreTemplates.id, occ.templateId))
+      .limit(1)
+    if (template) name = template.name
+  }
+
+  const notification: Notification = {
+    title: household.name,
+    body: `${actor.displayName} ${verb} ${name}`,
+  }
+  const mems = await db.select().from(members).where(eq(members.householdId, household.id))
+  for (const member of mems) {
+    if (member.id === actor.id) continue
+    await notifyMember(db, env, member.id, notification)
+  }
+}
+
 async function timedReminders(db: Db, env: Env, household: HouseholdRow, now: number) {
   const due = await db
     .select()
@@ -170,9 +216,12 @@ export async function runReminders(db: Db, env: Env, now: number): Promise<void>
   const rows = await db.select().from(households)
   for (const household of rows) {
     const localHour = zonedPartsFromInstant(now, household.ianaTimeZone).hour
-    if (!inQuietHours(localHour, household.quietStartHour, household.quietEndHour)) {
+    if (
+      household.remindersEnabled &&
+      !inQuietHours(localHour, household.quietStartHour, household.quietEndHour)
+    ) {
       await timedReminders(db, env, household, now)
     }
-    await dailyDigest(db, env, household, now)
+    if (household.digestEnabled) await dailyDigest(db, env, household, now)
   }
 }
