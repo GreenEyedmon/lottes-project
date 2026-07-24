@@ -19,9 +19,13 @@
     "verify": "pnpm typecheck && pnpm check:ci && pnpm test",
     "cf-typegen": "wrangler types",
     "postinstall": "wrangler types",
-    "deploy": "pnpm build && wrangler deploy"
+    "deploy": "pnpm build && wrangler deploy",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate:local": "wrangler d1 migrations apply lottes-db --local",
+    "db:migrate": "wrangler d1 migrations apply lottes-db --remote"
   },
   "dependencies": {
+    "drizzle-orm": "^0.45.2",
     "hono": "^4.12.31",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
@@ -34,6 +38,7 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
+    "drizzle-kit": "^0.31.10",
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.2",
     "vite": "^8.1.1",
