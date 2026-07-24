@@ -137,6 +137,21 @@ export const invites = sqliteTable('invites', {
   createdAt: integer('created_at').notNull(),
 })
 
+export const pushSubscriptions = sqliteTable(
+  'push_subscriptions',
+  {
+    id: text('id').primaryKey(),
+    memberId: text('member_id')
+      .notNull()
+      .references(() => members.id),
+    endpoint: text('endpoint').notNull().unique(),
+    p256dh: text('p256dh').notNull(),
+    auth: text('auth').notNull(),
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => [index('push_member_idx').on(t.memberId)],
+)
+
 export const reminders = sqliteTable(
   'reminders',
   {

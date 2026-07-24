@@ -15,6 +15,13 @@
       "when": 1784916859939,
       "tag": "0001_dazzling_chimera",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1784926552820,
+      "tag": "0002_violet_bushwacker",
+      "breakpoints": true
     }
   ]
 }
