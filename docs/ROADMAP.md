@@ -144,8 +144,9 @@ Full-spec scope; suggestions surface **inline on the chore** they concern:
   inline 💡 on the chore row. (Signals already captured: postpones, late/early.) — PR #15
 - **(3b) ✅ Day & time suggestions** — better weekday and due/reminder time from observed
   completion instants (reminder fires at the due instant, so it's one knob). — PR #16
-- **(3c) Rotation-fairness suggestions** — enable/reorder rotation from who actually
-  does the work (`by_non_assignee` + tally).
+- **(3c) ✅ Rotation-fairness suggestions** — `enableRotation` when a shared chore falls
+  lopsidedly on one person (completion tally). Reorder deliberately dropped (round-robin
+  is already order-independent). — PR #17
 - **(3d) `frequencyTarget` recurrence mode** — the third mode deferred from Phase 0;
   flexible "~2×/week" placement. Pure engine work, independent of 3a–3c.
 
