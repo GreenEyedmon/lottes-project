@@ -142,8 +142,8 @@ Full-spec scope; suggestions surface **inline on the chore** they concern:
 - **(3a) ✅ Infrastructure + frequency-fit suggestions** — `suggestions` table, pure
   analyzer, weekly generation cron, `applyTemplateChange` helper, accept/dismiss,
   inline 💡 on the chore row. (Signals already captured: postpones, late/early.) — PR #15
-- **(3b) Day & time suggestions** — better weekday, due time, and reminder time from
-  observed completion instants.
+- **(3b) ✅ Day & time suggestions** — better weekday and due/reminder time from observed
+  completion instants (reminder fires at the due instant, so it's one knob). — PR #16
 - **(3c) Rotation-fairness suggestions** — enable/reorder rotation from who actually
   does the work (`by_non_assignee` + tally).
 - **(3d) `frequencyTarget` recurrence mode** — the third mode deferred from Phase 0;
