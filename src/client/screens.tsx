@@ -605,12 +605,18 @@ function SettingsCard({ view }: { view: HouseholdView }) {
   const [digest, setDigest] = useState(view.household.digestHour)
   const [quietStart, setQuietStart] = useState(view.household.quietStartHour)
   const [quietEnd, setQuietEnd] = useState(view.household.quietEndHour)
+  const [reminders, setReminders] = useState(view.household.remindersEnabled)
+  const [digestOn, setDigestOn] = useState(view.household.digestEnabled)
+  const [activity, setActivity] = useState(view.household.activityEnabled)
   const save = useMutation({
     mutationFn: () =>
       updateSettings(view.household.id, {
         digestHour: digest,
         quietStartHour: quietStart,
         quietEndHour: quietEnd,
+        remindersEnabled: reminders,
+        digestEnabled: digestOn,
+        activityEnabled: activity,
       }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['household'] }),
   })
@@ -624,6 +630,25 @@ function SettingsCard({ view }: { view: HouseholdView }) {
         }}
         className="flex flex-col gap-3"
       >
+        <Toggle
+          label="Due-time reminders"
+          hint="Ping the person responsible when a timed chore comes due"
+          checked={reminders}
+          onChange={setReminders}
+        />
+        <Toggle
+          label="Daily digest"
+          hint="One summary of what's due and overdue"
+          checked={digestOn}
+          onChange={setDigestOn}
+        />
+        <Toggle
+          label="Activity updates"
+          hint="Tell the household when someone completes or claims a chore"
+          checked={activity}
+          onChange={setActivity}
+        />
+        <div className="divider my-0" />
         <div className="flex items-center justify-between gap-2 text-sm">
           <span>Daily digest at</span>
           <HourSelect label="Digest hour" value={digest} onChange={setDigest} />
@@ -641,6 +666,33 @@ function SettingsCard({ view }: { view: HouseholdView }) {
         </button>
       </form>
     </Card>
+  )
+}
+
+function Toggle({
+  label,
+  hint,
+  checked,
+  onChange,
+}: {
+  label: string
+  hint: string
+  checked: boolean
+  onChange: (value: boolean) => void
+}) {
+  return (
+    <label className="flex cursor-pointer items-start justify-between gap-3 text-sm">
+      <span className="flex flex-col">
+        <span>{label}</span>
+        <span className="text-base-content/50 text-xs">{hint}</span>
+      </span>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="toggle toggle-sm"
+      />
+    </label>
   )
 }
 

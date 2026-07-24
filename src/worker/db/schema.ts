@@ -16,6 +16,11 @@ export const households = sqliteTable('households', {
   digestHour: integer('digest_hour').notNull().default(8),
   quietStartHour: integer('quiet_start_hour').notNull().default(22),
   quietEndHour: integer('quiet_end_hour').notNull().default(7),
+  // Per-type notification switches. Reminders + digest default on; activity
+  // ("Alex completed Vacuum") defaults off so it's opt-in.
+  remindersEnabled: integer('reminders_enabled', { mode: 'boolean' }).notNull().default(true),
+  digestEnabled: integer('digest_enabled', { mode: 'boolean' }).notNull().default(true),
+  activityEnabled: integer('activity_enabled', { mode: 'boolean' }).notNull().default(false),
   createdAt: integer('created_at').notNull(),
 })
 
