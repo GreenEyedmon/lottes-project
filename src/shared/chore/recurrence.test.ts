@@ -198,14 +198,12 @@ describe('generateUpTo — guards', () => {
     expect(generateUpTo(template({ status: 'archived' }), ctx)).toEqual([])
   })
 
-  it('throws for the deferred frequency-target mode', () => {
-    expect(() =>
-      generateUpTo(template({ recurrence: { mode: 'frequencyTarget', timesPerWeek: 2 } }), {
-        fromInstant: at(2025, 7, 1),
-        horizonDays: 28,
-        timeZone: AMS,
-        existing: [],
-      }),
-    ).toThrow(/frequencyTarget/)
+  it('materializes frequency-target slots (see frequency-target.test.ts for depth)', () => {
+    const seeds = generateUpTo(
+      template({ recurrence: { mode: 'frequencyTarget', timesPerWeek: 2 } }),
+      { fromInstant: at(2025, 7, 1), horizonDays: 6, timeZone: AMS, existing: [] },
+    )
+    expect(seeds.length).toBeGreaterThan(0)
+    for (const seed of seeds) expect(seed.templateId).toBe('t1')
   })
 })

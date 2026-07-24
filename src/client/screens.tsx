@@ -177,6 +177,8 @@ const RECURRENCE_PRESETS: { label: string; rule: Record<string, unknown> }[] = [
   { label: 'Every Monday', rule: { mode: 'fixedWeekly', weekdays: [1] } },
   { label: 'Every Saturday', rule: { mode: 'fixedWeekly', weekdays: [6] } },
   { label: 'Every 2 weeks (after done)', rule: { mode: 'completionRelative', everyDays: 14 } },
+  { label: 'Twice a week', rule: { mode: 'frequencyTarget', timesPerWeek: 2 } },
+  { label: '3× a week', rule: { mode: 'frequencyTarget', timesPerWeek: 3 } },
 ]
 
 /** What happens to an occurrence that's missed (still open past its due date). */

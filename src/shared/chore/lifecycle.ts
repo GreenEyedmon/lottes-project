@@ -151,6 +151,12 @@ export function applyMissedPolicy(
   const overdue = occurrences.filter(
     (o) => o.state === 'scheduled' && resolveTemporalStatus(o, ctx) === 'overdue',
   )
+  // A frequency-target slot is a specific day within a "~N times per week" pattern: once it
+  // passes it just lapses, so the week's other slots stand and nothing backlogs. This is
+  // intrinsic to the mode and overrides the template's stored missed policy.
+  if (template.recurrence.mode === 'frequencyTarget') {
+    return overdue.map((o) => ({ occurrenceId: o.id, to: 'missed' }))
+  }
   if (template.missedPolicy === 'keep') return []
   if (template.missedPolicy === 'expire') {
     return overdue.map((o) => ({ occurrenceId: o.id, to: 'missed' }))

@@ -34,6 +34,17 @@ function mondayOf(date: LocalDate): LocalDate {
 }
 
 /**
+ * Day offsets from Monday for `n` evenly-spread slots in a week. n is clamped to 1–7.
+ * 1 → [0] (Mon); 2 → [0,3] (Mon,Thu); 3 → [0,2,4] (Mon,Wed,Fri); 7 → every day.
+ */
+export function weeklyTargetOffsets(timesPerWeek: number): number[] {
+  const n = Math.max(1, Math.min(7, Math.floor(timesPerWeek)))
+  const offsets: number[] = []
+  for (let i = 0; i < n; i++) offsets.push(Math.floor((i * 7) / n))
+  return offsets
+}
+
+/**
  * The next calendar date strictly after `after` that satisfies a fixed-calendar rule,
  * anchored to `startDate` for multi-week intervals. Returns `null` for non-calendar
  * modes (completion-relative / frequency-target), which are not slot-based.
@@ -107,7 +118,25 @@ export function generateUpTo(template: ChoreTemplate, ctx: GenerationContext): O
   const rule = template.recurrence
 
   if (rule.mode === 'frequencyTarget') {
-    throw new Error('frequencyTarget recurrence is not implemented until Phase 3')
+    // Materialize every evenly-spread weekly slot in [max(startDate, today), horizon].
+    // Placement is calendar-anchored per ISO week but day-tolerant: slots earlier than
+    // `windowStart` (e.g. already past this week) are simply never created, so a slow week
+    // never backlogs — the week's remaining slots still stand.
+    const windowStart = maxLocalDate(template.startDate, today)
+    const offsets = weeklyTargetOffsets(rule.timesPerWeek)
+    const seeds: OccurrenceSeed[] = []
+    let weekMonday = mondayOf(windowStart)
+    while (compareLocalDate(weekMonday, horizonEnd) <= 0) {
+      for (const offset of offsets) {
+        const candidate = addDays(weekMonday, offset)
+        if (compareLocalDate(candidate, windowStart) < 0) continue
+        if (compareLocalDate(candidate, horizonEnd) > 0) continue
+        const seed = seedFor(candidate)
+        if (seed) seeds.push(seed)
+      }
+      weekMonday = addDays(weekMonday, 7)
+    }
+    return seeds
   }
 
   if (rule.mode === 'completionRelative') {
