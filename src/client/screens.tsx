@@ -11,6 +11,8 @@ import {
   createInvite,
   createTask,
   getCurrentHousehold,
+  getHistory,
+  type HistoryWindow,
   type HouseholdView,
   listOccurrences,
   type OccurrenceView,
@@ -516,6 +518,79 @@ function SettingsCard({ view }: { view: HouseholdView }) {
   )
 }
 
+function timeAgo(at: number): string {
+  const seconds = Math.floor((Date.now() - at) / 1000)
+  if (seconds < 60) return 'just now'
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  return `${Math.floor(hours / 24)}d ago`
+}
+
+function HistorySection() {
+  const [range, setRange] = useState<HistoryWindow>('week')
+  const history = useQuery({ queryKey: ['history', range], queryFn: () => getHistory(range) })
+  const data = history.data
+
+  return (
+    <>
+      <Card title="Workload">
+        <div className="join">
+          <button
+            type="button"
+            onClick={() => setRange('week')}
+            className={`btn btn-xs join-item ${range === 'week' ? 'btn-active' : ''}`}
+          >
+            This week
+          </button>
+          <button
+            type="button"
+            onClick={() => setRange('month')}
+            className={`btn btn-xs join-item ${range === 'month' ? 'btn-active' : ''}`}
+          >
+            This month
+          </button>
+        </div>
+        {data && data.tally.length === 0 && (
+          <p className="text-base-content/50 text-sm">No completed chores in this window yet.</p>
+        )}
+        {data?.tally.map((entry) => {
+          const pct =
+            data.totalEffort > 0 ? Math.round((entry.effortMinutes / data.totalEffort) * 100) : 0
+          return (
+            <div key={entry.memberId} className="flex flex-col gap-1">
+              <div className="flex justify-between text-sm">
+                <span className="font-medium">{entry.name}</span>
+                <span className="text-base-content/60">
+                  {pct}% · {entry.completed} done · {entry.effortMinutes} min
+                </span>
+              </div>
+              <progress className="progress progress-primary h-1.5" value={pct} max={100} />
+            </div>
+          )
+        })}
+      </Card>
+
+      <Card title="Recent activity">
+        {data && data.activity.length === 0 && (
+          <p className="text-base-content/50 text-sm">Nothing yet.</p>
+        )}
+        <ul className="flex flex-col gap-1 text-sm">
+          {data?.activity.map((event) => (
+            <li key={event.id} className="flex justify-between gap-3">
+              <span>{event.text}</span>
+              <span className="whitespace-nowrap text-base-content/50 text-xs">
+                {timeAgo(event.at)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </Card>
+    </>
+  )
+}
+
 function HouseholdHome({ view }: { view: HouseholdView }) {
   const queryClient = useQueryClient()
   const [roomName, setRoomName] = useState('')
@@ -550,6 +625,8 @@ function HouseholdHome({ view }: { view: HouseholdView }) {
         </header>
 
         <ChoresSection view={view} />
+
+        <HistorySection />
 
         <Card title="Members">
           <ul className="flex flex-col gap-1">

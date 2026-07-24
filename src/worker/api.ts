@@ -23,6 +23,7 @@ import {
 } from './chores.ts'
 import { getDb } from './db/index.ts'
 import { households, invites, members, pushSubscriptions, rooms } from './db/schema.ts'
+import { getHistory } from './history.ts'
 import { isInviteUsable, newInviteCode } from './invites.ts'
 import { pushConfigured, sendPush } from './push.ts'
 
@@ -405,4 +406,19 @@ api.post('/households/:id/settings', async (c) => {
     })
     .where(eq(households.id, ctx.household.id))
   return c.json({ ok: true })
+})
+
+api.get('/history', async (c) => {
+  const user = c.get('user')
+  const ctx = await callerContext(c.env, user.id)
+  if (!ctx) return c.json({ error: 'no household' }, 404)
+  const window = c.req.query('window') === 'month' ? 'month' : 'week'
+  const history = await getHistory(
+    getDb(c.env.DB),
+    ctx.household.id,
+    ctx.household.ianaTimeZone,
+    window,
+    Date.now(),
+  )
+  return c.json(history)
 })
