@@ -15,7 +15,9 @@
     {
       "binding": "DB",
       "database_name": "lottes-db",
-      "database_id": "902878de-1942-491d-bae1-4067861f079b"
+      "database_id": "902878de-1942-491d-bae1-4067861f079b",
+      // Drizzle generates migrations here; `wrangler d1 migrations apply` consumes them.
+      "migrations_dir": "migrations"
     }
   ]
   // Cron triggers and secrets get added once the spec lands. The DB above is
