@@ -68,3 +68,26 @@ export function createChore(
 ): Promise<{ id: string }> {
   return request('/api/templates', { method: 'POST', body: JSON.stringify({ name, recurrence }) })
 }
+
+export function skipOccurrence(id: string): Promise<{ ok: boolean }> {
+  return request(`/api/occurrences/${id}/skip`, { method: 'POST' })
+}
+
+export function claimOccurrence(id: string): Promise<{ ok: boolean }> {
+  return request(`/api/occurrences/${id}/claim`, { method: 'POST' })
+}
+
+export function postponeOccurrence(
+  id: string,
+  mode: 'this' | 'thisAndFuture',
+  days: number,
+): Promise<{ ok: boolean }> {
+  return request(`/api/occurrences/${id}/postpone`, {
+    method: 'POST',
+    body: JSON.stringify({ mode, days }),
+  })
+}
+
+export function createTask(title: string): Promise<{ id: string }> {
+  return request('/api/tasks', { method: 'POST', body: JSON.stringify({ title }) })
+}

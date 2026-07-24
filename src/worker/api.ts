@@ -5,14 +5,21 @@
 
 import { eq } from 'drizzle-orm'
 import { Hono } from 'hono'
+import type { PostponeMode } from '../shared/chore/lifecycle.ts'
 import type { RecurrenceRule } from '../shared/chore/types.ts'
+import type { LocalDate } from '../shared/time/civil.ts'
+import type { TimeOfDay } from '../shared/time/zone.ts'
 import { localDateInZone } from '../shared/time/zone.ts'
 import { getSessionUser } from './auth.ts'
 import {
+  claimOccurrence,
   completeOccurrence,
+  createOneOff,
   createTemplate,
   listOpenOccurrences,
   type NewTemplate,
+  postponeOccurrence,
+  skipOccurrence,
 } from './chores.ts'
 import { getDb } from './db/index.ts'
 import { households, invites, members, rooms } from './db/schema.ts'
@@ -242,4 +249,71 @@ api.post('/occurrences/:id/complete', async (c) => {
   if (result === 'not-found') return c.json({ error: 'not found' }, 404)
   if (result === 'not-due') return c.json({ error: 'not due yet' }, 400)
   return c.json({ ok: true })
+})
+
+api.post('/occurrences/:id/skip', async (c) => {
+  const user = c.get('user')
+  const ctx = await callerContext(c.env, user.id)
+  if (!ctx) return c.json({ error: 'no household' }, 404)
+  const result = await skipOccurrence(
+    getDb(c.env.DB),
+    ctx.household.id,
+    ctx.household.ianaTimeZone,
+    c.req.param('id'),
+    ctx.member.id,
+    Date.now(),
+  )
+  if (result === 'not-found') return c.json({ error: 'not found' }, 404)
+  return c.json({ ok: true })
+})
+
+api.post('/occurrences/:id/claim', async (c) => {
+  const user = c.get('user')
+  const ctx = await callerContext(c.env, user.id)
+  if (!ctx) return c.json({ error: 'no household' }, 404)
+  const result = await claimOccurrence(
+    getDb(c.env.DB),
+    ctx.household.id,
+    c.req.param('id'),
+    ctx.member.id,
+    Date.now(),
+  )
+  if (result === 'not-found') return c.json({ error: 'not found' }, 404)
+  if (result === 'taken') return c.json({ error: 'already claimed' }, 409)
+  return c.json({ ok: true })
+})
+
+api.post('/occurrences/:id/postpone', async (c) => {
+  const user = c.get('user')
+  const ctx = await callerContext(c.env, user.id)
+  if (!ctx) return c.json({ error: 'no household' }, 404)
+  const body = await c.req.json<{ mode?: PostponeMode; days?: number }>()
+  const result = await postponeOccurrence(
+    getDb(c.env.DB),
+    ctx.household.id,
+    ctx.household.ianaTimeZone,
+    c.req.param('id'),
+    ctx.member.id,
+    body.mode ?? 'this',
+    body.days ?? 1,
+    Date.now(),
+  )
+  if (result === 'not-found') return c.json({ error: 'not found' }, 404)
+  return c.json({ ok: true })
+})
+
+api.post('/tasks', async (c) => {
+  const user = c.get('user')
+  const ctx = await callerContext(c.env, user.id)
+  if (!ctx) return c.json({ error: 'no household' }, 404)
+  const body = await c.req.json<{ title?: string; dueDate?: LocalDate; dueTime?: TimeOfDay }>()
+  if (!body.title) return c.json({ error: 'title is required' }, 400)
+  const now = Date.now()
+  const timeZone = ctx.household.ianaTimeZone
+  const result = await createOneOff(getDb(c.env.DB), ctx.household.id, timeZone, now, {
+    title: body.title,
+    dueDate: body.dueDate ?? localDateInZone(now, timeZone),
+    dueTime: body.dueTime,
+  })
+  return c.json(result, 201)
 })
