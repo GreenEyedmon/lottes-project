@@ -1,0 +1,6 @@
+# Per-project toolchain versions, auto-activated by mise on `cd` into this repo.
+# Node is pinned to 22 to match CI (.github/workflows/ci.yml). pnpm matches the
+# `packageManager` pin in package.json.
+[tools]
+node = "22"
+pnpm = "11.17.0"

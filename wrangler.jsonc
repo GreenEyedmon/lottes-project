@@ -10,6 +10,14 @@
   },
   "observability": {
     "enabled": true
-  }
-  // D1 bindings, cron triggers, and secrets get added once the spec lands.
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "lottes-db",
+      "database_id": "902878de-1942-491d-bae1-4067861f079b"
+    }
+  ]
+  // Cron triggers and secrets get added once the spec lands. The DB above is
+  // provisioned but has no schema yet — migrations come with the data model.
 }
