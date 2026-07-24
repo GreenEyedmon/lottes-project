@@ -1,1 +1,8 @@
 @import 'tailwindcss';
+
+/* daisyUI component layer on top of Tailwind. Light by default, dark when the OS asks. */
+@plugin 'daisyui' {
+  themes:
+    light --default,
+    dark --prefersdark;
+}

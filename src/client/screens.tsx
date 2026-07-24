@@ -15,19 +15,54 @@ import {
 } from './api.ts'
 import { authClient } from './auth-client.ts'
 
-const input = 'rounded border border-neutral-300 p-2'
-const primary = 'rounded bg-neutral-900 p-2 text-white disabled:opacity-50'
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'Something went wrong'
+}
 
-function Screen({ children }: { children: ReactNode }) {
+/** Full-height, centered wrapper on the app background. */
+function Centered({ children }: { children: ReactNode }) {
   return (
-    <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center gap-4 p-6">
-      {children}
-    </main>
+    <div className="flex min-h-dvh items-center justify-center bg-base-200 p-4">
+      <div className="w-full max-w-md">{children}</div>
+    </div>
   )
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : 'Something went wrong'
+/** A centered card with a title — the shell for auth / onboarding screens. */
+function CardScreen({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <Centered>
+      <div className="card border border-base-300 bg-base-100 shadow-xl">
+        <div className="card-body gap-4">
+          <h1 className="card-title text-2xl">{title}</h1>
+          {children}
+        </div>
+      </div>
+    </Centered>
+  )
+}
+
+function LoadingScreen() {
+  return (
+    <Centered>
+      <div className="flex justify-center">
+        <span className="loading loading-spinner loading-lg text-primary" />
+      </div>
+    </Centered>
+  )
+}
+
+function Card({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="card border border-base-300 bg-base-100 shadow-sm">
+      <div className="card-body gap-3 p-5">
+        <h2 className="font-semibold text-base-content/60 text-sm uppercase tracking-wide">
+          {title}
+        </h2>
+        {children}
+      </div>
+    </div>
+  )
 }
 
 export function SignIn({ callbackURL }: { callbackURL?: string }) {
@@ -52,16 +87,16 @@ export function SignIn({ callbackURL }: { callbackURL?: string }) {
 
   if (sent) {
     return (
-      <Screen>
-        <h1 className="font-semibold text-2xl">Check your email</h1>
-        <p className="text-neutral-500 text-sm">We sent a sign-in link to {normalizedEmail}.</p>
-      </Screen>
+      <CardScreen title="Check your email">
+        <p className="text-base-content/70">
+          We sent a sign-in link to <span className="font-medium">{normalizedEmail}</span>.
+        </p>
+      </CardScreen>
     )
   }
 
   return (
-    <Screen>
-      <h1 className="font-semibold text-2xl">Sign in to Lottes Project</h1>
+    <CardScreen title="Sign in to Lottes Project">
       <form onSubmit={submit} className="flex flex-col gap-3">
         <input
           type="email"
@@ -70,14 +105,14 @@ export function SignIn({ callbackURL }: { callbackURL?: string }) {
           onChange={(e) => setEmail(e.target.value)}
           placeholder="you@example.com"
           aria-label="Email address"
-          className={input}
+          className="input input-bordered w-full"
         />
-        <button type="submit" className={primary}>
+        <button type="submit" className="btn btn-primary">
           Email me a sign-in link
         </button>
-        {error && <p className="text-red-600 text-sm">{error}</p>}
+        {error && <p className="text-error text-sm">{error}</p>}
       </form>
-    </Screen>
+    </CardScreen>
   )
 }
 
@@ -91,10 +126,9 @@ export function CreateHousehold() {
   })
 
   return (
-    <Screen>
-      <h1 className="font-semibold text-2xl">Create your household</h1>
-      <p className="text-neutral-500 text-sm">
-        Time zone: <span className="font-mono">{timeZone}</span>
+    <CardScreen title="Create your household">
+      <p className="text-base-content/60 text-sm">
+        Time zone: <span className="badge badge-ghost font-mono">{timeZone}</span>
       </p>
       <form
         onSubmit={(e) => {
@@ -109,14 +143,15 @@ export function CreateHousehold() {
           onChange={(e) => setName(e.target.value)}
           placeholder="The Bronsveld house"
           aria-label="Household name"
-          className={input}
+          className="input input-bordered w-full"
         />
-        <button type="submit" disabled={mutation.isPending} className={primary}>
+        <button type="submit" disabled={mutation.isPending} className="btn btn-primary">
+          {mutation.isPending && <span className="loading loading-spinner loading-sm" />}
           Create household
         </button>
-        {mutation.error && <p className="text-red-600 text-sm">{errorMessage(mutation.error)}</p>}
+        {mutation.error && <p className="text-error text-sm">{errorMessage(mutation.error)}</p>}
       </form>
-    </Screen>
+    </CardScreen>
   )
 }
 
@@ -132,6 +167,11 @@ const STATUS_LABEL: Record<TemporalStatus, string> = {
   overdue: 'Overdue',
   due: 'Today',
   upcoming: 'Upcoming',
+}
+const STATUS_BADGE: Record<TemporalStatus, string> = {
+  overdue: 'badge-error',
+  due: 'badge-warning',
+  upcoming: 'badge-ghost',
 }
 
 function ChoresSection() {
@@ -157,36 +197,36 @@ function ChoresSection() {
   )
 
   return (
-    <section className="flex flex-col gap-2">
-      <h2 className="font-medium text-neutral-500 text-sm">Chores</h2>
-      <ul className="flex flex-col gap-1">
-        {sorted.map((occ) => (
-          <li key={occ.id} className="flex items-center justify-between gap-2">
-            <span>
-              <span className={occ.temporalStatus === 'overdue' ? 'text-red-600' : ''}>
-                {occ.name}
+    <Card title="Chores">
+      {sorted.length === 0 ? (
+        <p className="text-base-content/50 text-sm">No chores yet — add your first below.</p>
+      ) : (
+        <ul className="flex flex-col divide-y divide-base-200">
+          {sorted.map((occ) => (
+            <li key={occ.id} className="flex items-center justify-between gap-3 py-2">
+              <span className="flex items-center gap-2">
+                <span className={`badge badge-sm ${STATUS_BADGE[occ.temporalStatus]}`}>
+                  {STATUS_LABEL[occ.temporalStatus]}
+                </span>
+                <span className="font-medium">{occ.name}</span>
               </span>
-              <span className="ml-2 text-neutral-400 text-xs">
-                {STATUS_LABEL[occ.temporalStatus]}
-              </span>
-            </span>
-            <button
-              type="button"
-              onClick={() => complete.mutate(occ.id)}
-              className="rounded border border-neutral-300 px-2 text-sm"
-            >
-              Done
-            </button>
-          </li>
-        ))}
-        {sorted.length === 0 && <li className="text-neutral-400">No chores yet</li>}
-      </ul>
+              <button
+                type="button"
+                onClick={() => complete.mutate(occ.id)}
+                className="btn btn-primary btn-sm"
+              >
+                Done
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
       <form
         onSubmit={(e) => {
           e.preventDefault()
           add.mutate()
         }}
-        className="mt-1 flex gap-2"
+        className="flex flex-col gap-2 sm:flex-row"
       >
         <input
           required
@@ -194,13 +234,13 @@ function ChoresSection() {
           onChange={(e) => setName(e.target.value)}
           placeholder="Vacuum living room"
           aria-label="Chore name"
-          className={`flex-1 ${input}`}
+          className="input input-bordered input-sm flex-1"
         />
         <select
           value={presetIndex}
           onChange={(e) => setPresetIndex(Number(e.target.value))}
           aria-label="Recurrence"
-          className={input}
+          className="select select-bordered select-sm"
         >
           {RECURRENCE_PRESETS.map((preset, i) => (
             <option key={preset.label} value={i}>
@@ -208,11 +248,11 @@ function ChoresSection() {
             </option>
           ))}
         </select>
-        <button type="submit" className="rounded bg-neutral-900 px-3 text-white">
+        <button type="submit" className="btn btn-neutral btn-sm">
           Add
         </button>
       </form>
-    </section>
+    </Card>
   )
 }
 
@@ -234,77 +274,97 @@ function HouseholdHome({ view }: { view: HouseholdView }) {
   })
 
   return (
-    <Screen>
-      <div className="flex items-center justify-between">
-        <h1 className="font-semibold text-2xl">{view.household.name}</h1>
-        <button
-          type="button"
-          onClick={() => {
-            void authClient.signOut().then(() => window.location.reload())
-          }}
-          className="text-neutral-500 text-sm underline"
-        >
-          Sign out
-        </button>
-      </div>
-
-      <ChoresSection />
-
-      <section>
-        <h2 className="font-medium text-neutral-500 text-sm">Members</h2>
-        <ul className="mt-1">
-          {view.members.map((member) => (
-            <li key={member.id}>
-              {member.displayName} <span className="text-neutral-400 text-xs">({member.role})</span>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section>
-        <h2 className="font-medium text-neutral-500 text-sm">Rooms</h2>
-        <ul className="mt-1">
-          {view.rooms.map((room) => (
-            <li key={room.id}>{room.name}</li>
-          ))}
-          {view.rooms.length === 0 && <li className="text-neutral-400">None yet</li>}
-        </ul>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault()
-            addRoomMutation.mutate()
-          }}
-          className="mt-2 flex gap-2"
-        >
-          <input
-            required
-            value={roomName}
-            onChange={(e) => setRoomName(e.target.value)}
-            placeholder="Kitchen"
-            aria-label="New room name"
-            className={`flex-1 ${input}`}
-          />
-          <button type="submit" className="rounded bg-neutral-900 px-3 text-white">
-            Add
-          </button>
-        </form>
-      </section>
-
-      {view.me.role === 'owner' && (
-        <section className="flex flex-col gap-2">
+    <div className="min-h-dvh bg-base-200">
+      <div className="mx-auto flex max-w-lg flex-col gap-4 p-4">
+        <header className="flex items-center justify-between py-2">
+          <h1 className="font-bold text-2xl">{view.household.name}</h1>
           <button
             type="button"
-            onClick={() => inviteMutation.mutate()}
-            className="rounded border border-neutral-300 p-2"
+            onClick={() => {
+              void authClient.signOut().then(() => window.location.reload())
+            }}
+            className="btn btn-ghost btn-sm"
           >
-            Create invite link
+            Sign out
           </button>
-          {inviteLink && (
-            <p className="break-all font-mono text-neutral-600 text-xs">{inviteLink}</p>
+        </header>
+
+        <ChoresSection />
+
+        <Card title="Members">
+          <ul className="flex flex-col gap-1">
+            {view.members.map((member) => (
+              <li key={member.id} className="flex items-center gap-2">
+                <span className="font-medium">{member.displayName}</span>
+                <span className="badge badge-ghost badge-sm">{member.role}</span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+
+        <Card title="Rooms">
+          {view.rooms.length === 0 ? (
+            <p className="text-base-content/50 text-sm">None yet.</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {view.rooms.map((room) => (
+                <span key={room.id} className="badge badge-lg badge-outline">
+                  {room.name}
+                </span>
+              ))}
+            </div>
           )}
-        </section>
-      )}
-    </Screen>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              addRoomMutation.mutate()
+            }}
+            className="flex gap-2"
+          >
+            <input
+              required
+              value={roomName}
+              onChange={(e) => setRoomName(e.target.value)}
+              placeholder="Kitchen"
+              aria-label="New room name"
+              className="input input-bordered input-sm flex-1"
+            />
+            <button type="submit" className="btn btn-neutral btn-sm">
+              Add
+            </button>
+          </form>
+        </Card>
+
+        {view.me.role === 'owner' && (
+          <Card title="Invite">
+            <button
+              type="button"
+              onClick={() => inviteMutation.mutate()}
+              className="btn btn-outline btn-sm w-fit"
+            >
+              Create invite link
+            </button>
+            {inviteLink && (
+              <div className="join w-full">
+                <input
+                  readOnly
+                  value={inviteLink}
+                  aria-label="Invite link"
+                  className="input input-bordered input-sm join-item flex-1 font-mono text-xs"
+                />
+                <button
+                  type="button"
+                  onClick={() => void navigator.clipboard?.writeText(inviteLink)}
+                  className="btn btn-neutral btn-sm join-item"
+                >
+                  Copy
+                </button>
+              </div>
+            )}
+          </Card>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -317,9 +377,9 @@ export function Home() {
     enabled: Boolean(session.data),
   })
 
-  if (session.isPending) return <Screen>Loading…</Screen>
+  if (session.isPending) return <LoadingScreen />
   if (!session.data) return <SignIn />
-  if (household.isPending) return <Screen>Loading…</Screen>
+  if (household.isPending) return <LoadingScreen />
   if (!household.data) return <CreateHousehold />
   return <HouseholdHome view={household.data} />
 }
@@ -334,25 +394,25 @@ export function Join() {
     onSuccess: () => navigate({ to: '/' }),
   })
 
-  if (session.isPending) return <Screen>Loading…</Screen>
+  if (session.isPending) return <LoadingScreen />
   if (!session.data) return <SignIn callbackURL={`${window.location.origin}/join?code=${code}`} />
 
   return (
-    <Screen>
-      <h1 className="font-semibold text-2xl">Join a household</h1>
+    <CardScreen title="Join a household">
       {code ? (
         <button
           type="button"
           onClick={() => mutation.mutate()}
           disabled={mutation.isPending}
-          className={primary}
+          className="btn btn-primary"
         >
+          {mutation.isPending && <span className="loading loading-spinner loading-sm" />}
           Join
         </button>
       ) : (
-        <p className="text-red-600">This invite link is missing its code.</p>
+        <p className="text-error">This invite link is missing its code.</p>
       )}
-      {mutation.error && <p className="text-red-600 text-sm">{errorMessage(mutation.error)}</p>}
-    </Screen>
+      {mutation.error && <p className="text-error text-sm">{errorMessage(mutation.error)}</p>}
+    </CardScreen>
   )
 }
