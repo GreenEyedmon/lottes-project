@@ -4,7 +4,7 @@
  * the analyzers are pure, and a suggestion only takes effect when the user accepts it.
  */
 
-import type { RecurrenceRule } from '../chore/types.ts'
+import type { RecurrenceRule, Weekday } from '../chore/types.ts'
 import type { TimeOfDay } from '../time/zone.ts'
 
 /**
@@ -58,4 +58,37 @@ export interface FrequencySuggestion {
   proposedRule: RecurrenceRule
   explanation: string
   evidence: FrequencyEvidence
+}
+
+/** One completion's local-time coordinates, in the household's zone. */
+export interface CompletionMoment {
+  /** ISO weekday, 1 = Monday … 7 = Sunday. */
+  weekday: Weekday
+  /** Local hour, 0–23. */
+  hour: number
+}
+
+/** Per-template timing signals: the current schedule plus when completions actually land. */
+export interface TimingSignals {
+  rule: RecurrenceRule
+  currentDueTime: TimeOfDay | null
+  moments: readonly CompletionMoment[]
+}
+
+export type WeekdayEvidence = { sampleSize: number; onProposedWeekday: number }
+
+export interface WeekdaySuggestion {
+  kind: 'shiftWeekday'
+  proposedRule: RecurrenceRule
+  explanation: string
+  evidence: WeekdayEvidence
+}
+
+export type DueTimeEvidence = { sampleSize: number; typicalHour: number; currentHour: number }
+
+export interface DueTimeSuggestion {
+  kind: 'shiftDueTime'
+  proposedDueTime: TimeOfDay
+  explanation: string
+  evidence: DueTimeEvidence
 }
