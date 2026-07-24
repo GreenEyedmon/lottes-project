@@ -4,6 +4,7 @@ import { createAuth } from './auth.ts'
 import { generateForHousehold } from './chores.ts'
 import { getDb } from './db/index.ts'
 import { households } from './db/schema.ts'
+import { runReminders } from './reminders.ts'
 
 export const app = new Hono<{ Bindings: Env }>()
 
@@ -19,15 +20,19 @@ app.route('/api', api)
 export default {
   fetch: app.fetch,
 
-  // Daily generation cron: top up each household's occurrence horizon and sweep
-  // missed-occurrence policies. Day-boundary logic lives in the engine, in the
-  // household's timezone.
-  async scheduled(_controller: ScheduledController, env: Env, _ctx: ExecutionContext) {
+  // Two crons: nightly occurrence generation + missed-policy sweep, and a 5-minute
+  // reminder pass (timed reminders + daily digest). Day-boundary/quiet-hours logic
+  // lives in the engine + reminders module, in each household's timezone.
+  async scheduled(controller: ScheduledController, env: Env, _ctx: ExecutionContext) {
     const db = getDb(env.DB)
     const now = Date.now()
-    const rows = await db.select().from(households)
-    for (const household of rows) {
-      await generateForHousehold(db, household.id, household.ianaTimeZone, now)
+    if (controller.cron === '0 3 * * *') {
+      const rows = await db.select().from(households)
+      for (const household of rows) {
+        await generateForHousehold(db, household.id, household.ianaTimeZone, now)
+      }
+    } else {
+      await runReminders(db, env, now)
     }
   },
 }
