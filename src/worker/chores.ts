@@ -185,6 +185,7 @@ export interface OccurrenceView {
   dueDate: string
   temporalStatus: TemporalStatus
   responsibleId: string | null
+  templateId: string | null
 }
 
 export async function listOpenOccurrences(
@@ -209,6 +210,7 @@ export async function listOpenOccurrences(
     dueDate: occurrence.dueDate,
     temporalStatus: resolveTemporalStatus(toEngineOccurrence(occurrence), { now, timeZone }),
     responsibleId: occurrence.responsibleId,
+    templateId: occurrence.templateId,
   }))
 }
 
@@ -334,7 +336,7 @@ export async function createTemplate(
 function activityWrite(
   db: Db,
   householdId: string,
-  occurrenceId: string,
+  occurrenceId: string | null,
   actorId: string,
   type: string,
   now: number,
@@ -545,4 +547,63 @@ export async function createOneOff(
     createdAt: now,
   })
   return { id }
+}
+
+export interface TemplateChange {
+  recurrence?: RecurrenceRule
+  dueTime?: TimeOfDay | null
+  rotate?: boolean
+}
+
+/**
+ * Apply a schedule change to a template (used by accepted Phase 3 suggestions): bump the
+ * template, cancel its future `scheduled` occurrences, regenerate from the new rule, and
+ * log a `ruleChanged` activity. Optimistically concurrent on the template version.
+ */
+export async function applyTemplateChange(
+  db: Db,
+  householdId: string,
+  timeZone: string,
+  templateId: string,
+  change: TemplateChange,
+  actorId: string,
+  now: number,
+): Promise<'ok' | 'not-found'> {
+  const [templateRow] = await db
+    .select()
+    .from(choreTemplates)
+    .where(eq(choreTemplates.id, templateId))
+    .limit(1)
+  if (!templateRow || templateRow.householdId !== householdId) return 'not-found'
+
+  const set: Partial<typeof choreTemplates.$inferInsert> = { version: templateRow.version + 1 }
+  if (change.recurrence) set.recurrence = change.recurrence
+  if (change.dueTime !== undefined) {
+    set.dueTime = change.dueTime ? formatTimeOfDay(change.dueTime) : null
+  }
+  if (change.rotate !== undefined) set.rotate = change.rotate
+
+  await runBatch(db, [
+    db
+      .update(choreTemplates)
+      .set(set)
+      .where(
+        and(eq(choreTemplates.id, templateId), eq(choreTemplates.version, templateRow.version)),
+      ),
+    db
+      .update(choreOccurrences)
+      .set({ state: 'cancelled' })
+      .where(
+        and(eq(choreOccurrences.templateId, templateId), eq(choreOccurrences.state, 'scheduled')),
+      ),
+    activityWrite(db, householdId, null, actorId, 'ruleChanged', now),
+  ])
+
+  const [updated] = await db
+    .select()
+    .from(choreTemplates)
+    .where(eq(choreTemplates.id, templateId))
+    .limit(1)
+  if (updated) await runBatch(db, await templateWrites(db, updated, timeZone, now))
+  return 'ok'
 }

@@ -63,6 +63,7 @@ export interface OccurrenceView {
   dueDate: string
   temporalStatus: TemporalStatus
   responsibleId: string | null
+  templateId: string | null
 }
 
 export async function listOccurrences(): Promise<OccurrenceView[]> {
@@ -164,4 +165,25 @@ export interface HistoryView {
 
 export function getHistory(window: HistoryWindow): Promise<HistoryView> {
   return request(`/api/history?window=${window}`)
+}
+
+export interface SuggestionView {
+  id: string
+  templateId: string
+  kind: string
+  explanation: string
+  evidence: Record<string, number>
+}
+
+export async function listSuggestions(): Promise<SuggestionView[]> {
+  const data = await request<{ suggestions: SuggestionView[] }>('/api/suggestions')
+  return data.suggestions
+}
+
+export function acceptSuggestion(id: string): Promise<{ ok: boolean }> {
+  return request(`/api/suggestions/${id}/accept`, { method: 'POST' })
+}
+
+export function dismissSuggestion(id: string): Promise<{ ok: boolean }> {
+  return request(`/api/suggestions/${id}/dismiss`, { method: 'POST' })
 }

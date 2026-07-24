@@ -7,6 +7,7 @@
 
 import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 import type { RecurrenceRule } from '../../shared/chore/types.ts'
+import type { SuggestionKind, SuggestionPatch } from '../../shared/suggest/types.ts'
 
 export const households = sqliteTable('households', {
   id: text('id').primaryKey(),
@@ -175,4 +176,30 @@ export const reminders = sqliteTable(
     dedupeKey: text('dedupe_key').notNull().unique(),
   },
   (t) => [index('reminders_pending_idx').on(t.remindAt)],
+)
+
+export const suggestions = sqliteTable(
+  'suggestions',
+  {
+    id: text('id').primaryKey(),
+    householdId: text('household_id')
+      .notNull()
+      .references(() => households.id),
+    templateId: text('template_id')
+      .notNull()
+      .references(() => choreTemplates.id),
+    kind: text('kind').$type<SuggestionKind>().notNull(),
+    status: text('status', { enum: ['pending', 'accepted', 'dismissed'] }).notNull(),
+    // The change an Accept applies, and the numbers that justify it.
+    patch: text('patch', { mode: 'json' }).$type<SuggestionPatch>().notNull(),
+    explanation: text('explanation').notNull(),
+    evidence: text('evidence', { mode: 'json' }).$type<Record<string, number>>().notNull(),
+    createdAt: integer('created_at').notNull(),
+    resolvedAt: integer('resolved_at'),
+    resolvedBy: text('resolved_by').references(() => members.id),
+    // `${templateId}:${kind}` while pending, NULL once resolved — so at most one open
+    // suggestion of a kind per chore, while history (many NULLs) is retained.
+    dedupeKey: text('dedupe_key').unique(),
+  },
+  (t) => [index('suggestions_household_status_idx').on(t.householdId, t.status)],
 )
