@@ -71,14 +71,16 @@ export function completeOccurrence(id: string): Promise<{ ok: boolean }> {
   return request(`/api/occurrences/${id}/complete`, { method: 'POST' })
 }
 
+export type MissedPolicy = 'collapse' | 'keep' | 'expire'
+
 export function createChore(
   name: string,
   recurrence: Record<string, unknown>,
-  rotate = false,
+  options: { rotate?: boolean; missedPolicy?: MissedPolicy } = {},
 ): Promise<{ id: string }> {
   return request('/api/templates', {
     method: 'POST',
-    body: JSON.stringify({ name, recurrence, rotate }),
+    body: JSON.stringify({ name, recurrence, ...options }),
   })
 }
 

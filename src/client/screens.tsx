@@ -18,6 +18,7 @@ import {
   type HistoryWindow,
   type HouseholdView,
   listOccurrences,
+  type MissedPolicy,
   type OccurrenceView,
   postponeOccurrence,
   skipOccurrence,
@@ -172,6 +173,13 @@ const RECURRENCE_PRESETS: { label: string; rule: Record<string, unknown> }[] = [
   { label: 'Every Monday', rule: { mode: 'fixedWeekly', weekdays: [1] } },
   { label: 'Every Saturday', rule: { mode: 'fixedWeekly', weekdays: [6] } },
   { label: 'Every 2 weeks (after done)', rule: { mode: 'completionRelative', everyDays: 14 } },
+]
+
+/** What happens to an occurrence that's missed (still open past its due date). */
+const MISSED_POLICIES: { value: MissedPolicy; label: string; hint: string }[] = [
+  { value: 'collapse', label: 'Roll forward', hint: 'A missed turn merges into the next one' },
+  { value: 'keep', label: 'Pile up', hint: 'Missed turns stay on the list as overdue' },
+  { value: 'expire', label: 'Let it go', hint: 'A missed turn just disappears' },
 ]
 
 const STATUS_LABEL: Record<TemporalStatus, string> = {
@@ -352,6 +360,7 @@ function ChoresSection({ view }: { view: HouseholdView }) {
   const [name, setName] = useState('')
   const [presetIndex, setPresetIndex] = useState(0)
   const [rotate, setRotate] = useState(false)
+  const [missedPolicy, setMissedPolicy] = useState<MissedPolicy>('collapse')
   const [taskTitle, setTaskTitle] = useState('')
   const [catalogOpen, setCatalogOpen] = useState(false)
   const occurrences = useQuery({ queryKey: ['occurrences'], queryFn: listOccurrences })
@@ -365,10 +374,12 @@ function ChoresSection({ view }: { view: HouseholdView }) {
     onSuccess: invalidate,
   })
   const addChore = useMutation({
-    mutationFn: () => createChore(name, RECURRENCE_PRESETS[presetIndex]?.rule ?? {}, rotate),
+    mutationFn: () =>
+      createChore(name, RECURRENCE_PRESETS[presetIndex]?.rule ?? {}, { rotate, missedPolicy }),
     onSuccess: () => {
       setName('')
       setRotate(false)
+      setMissedPolicy('collapse')
       invalidate()
     },
   })
@@ -449,6 +460,19 @@ function ChoresSection({ view }: { view: HouseholdView }) {
           {RECURRENCE_PRESETS.map((preset, i) => (
             <option key={preset.label} value={i}>
               {preset.label}
+            </option>
+          ))}
+        </select>
+        <select
+          value={missedPolicy}
+          onChange={(e) => setMissedPolicy(e.target.value as MissedPolicy)}
+          aria-label="If missed"
+          title={MISSED_POLICIES.find((p) => p.value === missedPolicy)?.hint}
+          className="select select-bordered select-sm"
+        >
+          {MISSED_POLICIES.map((policy) => (
+            <option key={policy.value} value={policy.value} title={policy.hint}>
+              If missed: {policy.label}
             </option>
           ))}
         </select>
