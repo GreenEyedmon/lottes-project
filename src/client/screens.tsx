@@ -4,13 +4,18 @@ import { type FormEvent, type ReactNode, useState } from 'react'
 import {
   acceptInvite,
   addRoom,
+  claimOccurrence,
   completeOccurrence,
   createChore,
   createHousehold,
   createInvite,
+  createTask,
   getCurrentHousehold,
   type HouseholdView,
   listOccurrences,
+  type OccurrenceView,
+  postponeOccurrence,
+  skipOccurrence,
   type TemporalStatus,
 } from './api.ts'
 import { authClient } from './auth-client.ts'
@@ -162,71 +167,182 @@ const RECURRENCE_PRESETS: { label: string; rule: Record<string, unknown> }[] = [
   { label: 'Every 2 weeks (after done)', rule: { mode: 'completionRelative', everyDays: 14 } },
 ]
 
-const STATUS_ORDER: Record<TemporalStatus, number> = { overdue: 0, due: 1, upcoming: 2 }
 const STATUS_LABEL: Record<TemporalStatus, string> = {
   overdue: 'Overdue',
   due: 'Today',
   upcoming: 'Upcoming',
 }
-const STATUS_BADGE: Record<TemporalStatus, string> = {
-  overdue: 'badge-error',
-  due: 'badge-warning',
-  upcoming: 'badge-ghost',
+const STATUS_TEXT: Record<TemporalStatus, string> = {
+  overdue: 'text-error',
+  due: 'text-warning',
+  upcoming: 'text-base-content/50',
+}
+const GROUP_ORDER: TemporalStatus[] = ['overdue', 'due', 'upcoming']
+
+interface PostponeArgs {
+  id: string
+  mode: 'this' | 'thisAndFuture'
+  days: number
 }
 
-function ChoresSection() {
+function OccurrenceRow({
+  occ,
+  memberName,
+  onComplete,
+  onSkip,
+  onClaim,
+  onPostpone,
+}: {
+  occ: OccurrenceView
+  memberName: (id: string) => string
+  onComplete: (id: string) => void
+  onSkip: (id: string) => void
+  onClaim: (id: string) => void
+  onPostpone: (args: PostponeArgs) => void
+}) {
+  return (
+    <li className="flex items-center justify-between gap-2 py-2">
+      <div className="flex flex-col">
+        <span className="font-medium">{occ.name}</span>
+        {occ.responsibleId ? (
+          <span className="text-base-content/50 text-xs">{memberName(occ.responsibleId)}</span>
+        ) : (
+          <span className="text-warning text-xs">Unassigned</span>
+        )}
+      </div>
+      <div className="flex items-center gap-1">
+        {occ.temporalStatus !== 'upcoming' && (
+          <button
+            type="button"
+            onClick={() => onComplete(occ.id)}
+            className="btn btn-primary btn-sm"
+          >
+            Done
+          </button>
+        )}
+        <div className="dropdown dropdown-end">
+          <button
+            type="button"
+            tabIndex={0}
+            aria-label="More actions"
+            className="btn btn-square btn-ghost btn-sm"
+          >
+            ⋯
+          </button>
+          <ul className="dropdown-content menu z-10 w-52 rounded-box border border-base-300 bg-base-100 p-1 shadow">
+            <li>
+              <button
+                type="button"
+                onClick={() => onPostpone({ id: occ.id, mode: 'this', days: 1 })}
+              >
+                Postpone to tomorrow
+              </button>
+            </li>
+            <li>
+              <button
+                type="button"
+                onClick={() => onPostpone({ id: occ.id, mode: 'this', days: 7 })}
+              >
+                Postpone 1 week
+              </button>
+            </li>
+            <li>
+              <button
+                type="button"
+                onClick={() => onPostpone({ id: occ.id, mode: 'thisAndFuture', days: 7 })}
+              >
+                Shift 1 week (and future)
+              </button>
+            </li>
+            <li>
+              <button type="button" onClick={() => onSkip(occ.id)}>
+                Skip
+              </button>
+            </li>
+            {!occ.responsibleId && (
+              <li>
+                <button type="button" onClick={() => onClaim(occ.id)}>
+                  Claim it
+                </button>
+              </li>
+            )}
+          </ul>
+        </div>
+      </div>
+    </li>
+  )
+}
+
+function ChoresSection({ view }: { view: HouseholdView }) {
   const queryClient = useQueryClient()
   const [name, setName] = useState('')
   const [presetIndex, setPresetIndex] = useState(0)
+  const [taskTitle, setTaskTitle] = useState('')
   const occurrences = useQuery({ queryKey: ['occurrences'], queryFn: listOccurrences })
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['occurrences'] })
   const complete = useMutation({ mutationFn: completeOccurrence, onSuccess: invalidate })
-  const add = useMutation({
+  const skip = useMutation({ mutationFn: skipOccurrence, onSuccess: invalidate })
+  const claim = useMutation({ mutationFn: claimOccurrence, onSuccess: invalidate })
+  const postpone = useMutation({
+    mutationFn: (args: PostponeArgs) => postponeOccurrence(args.id, args.mode, args.days),
+    onSuccess: invalidate,
+  })
+  const addChore = useMutation({
     mutationFn: () => createChore(name, RECURRENCE_PRESETS[presetIndex]?.rule ?? {}),
     onSuccess: () => {
       setName('')
       invalidate()
     },
   })
+  const addTask = useMutation({
+    mutationFn: () => createTask(taskTitle),
+    onSuccess: () => {
+      setTaskTitle('')
+      invalidate()
+    },
+  })
 
-  const sorted = [...(occurrences.data ?? [])].sort(
-    (a, b) =>
-      STATUS_ORDER[a.temporalStatus] - STATUS_ORDER[b.temporalStatus] ||
-      a.dueDate.localeCompare(b.dueDate),
-  )
+  const memberName = (id: string): string =>
+    view.members.find((m) => m.id === id)?.displayName ?? 'Someone'
+
+  const groups = GROUP_ORDER.map((status) => ({
+    status,
+    items: (occurrences.data ?? [])
+      .filter((o) => o.temporalStatus === status)
+      .sort((a, b) => a.dueDate.localeCompare(b.dueDate)),
+  })).filter((group) => group.items.length > 0)
 
   return (
-    <Card title="Chores">
-      {sorted.length === 0 ? (
-        <p className="text-base-content/50 text-sm">No chores yet — add your first below.</p>
-      ) : (
-        <ul className="flex flex-col divide-y divide-base-200">
-          {sorted.map((occ) => (
-            <li key={occ.id} className="flex items-center justify-between gap-3 py-2">
-              <span className="flex items-center gap-2">
-                <span className={`badge badge-sm ${STATUS_BADGE[occ.temporalStatus]}`}>
-                  {STATUS_LABEL[occ.temporalStatus]}
-                </span>
-                <span className="font-medium">{occ.name}</span>
-              </span>
-              {occ.temporalStatus !== 'upcoming' && (
-                <button
-                  type="button"
-                  onClick={() => complete.mutate(occ.id)}
-                  className="btn btn-primary btn-sm"
-                >
-                  Done
-                </button>
-              )}
-            </li>
-          ))}
-        </ul>
+    <Card title="Chores & tasks">
+      {groups.length === 0 && (
+        <p className="text-base-content/50 text-sm">Nothing scheduled — add one below.</p>
       )}
+      {groups.map(({ status, items }) => (
+        <div key={status} className="flex flex-col gap-1">
+          <p className={`font-semibold text-xs uppercase tracking-wide ${STATUS_TEXT[status]}`}>
+            {STATUS_LABEL[status]}
+          </p>
+          <ul className="flex flex-col divide-y divide-base-200">
+            {items.map((occ) => (
+              <OccurrenceRow
+                key={occ.id}
+                occ={occ}
+                memberName={memberName}
+                onComplete={(id) => complete.mutate(id)}
+                onSkip={(id) => skip.mutate(id)}
+                onClaim={(id) => claim.mutate(id)}
+                onPostpone={(args) => postpone.mutate(args)}
+              />
+            ))}
+          </ul>
+        </div>
+      ))}
+
       <form
         onSubmit={(e) => {
           e.preventDefault()
-          add.mutate()
+          addChore.mutate()
         }}
         className="flex flex-col gap-2 sm:flex-row"
       >
@@ -234,7 +350,7 @@ function ChoresSection() {
           required
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Vacuum living room"
+          placeholder="New chore (e.g. Vacuum)"
           aria-label="Chore name"
           className="input input-bordered input-sm flex-1"
         />
@@ -251,7 +367,27 @@ function ChoresSection() {
           ))}
         </select>
         <button type="submit" className="btn btn-neutral btn-sm">
-          Add
+          Add chore
+        </button>
+      </form>
+
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          addTask.mutate()
+        }}
+        className="flex gap-2"
+      >
+        <input
+          required
+          value={taskTitle}
+          onChange={(e) => setTaskTitle(e.target.value)}
+          placeholder="One-off task (e.g. Call plumber)"
+          aria-label="Task title"
+          className="input input-bordered input-sm flex-1"
+        />
+        <button type="submit" className="btn btn-outline btn-sm">
+          Add task
         </button>
       </form>
     </Card>
@@ -291,7 +427,7 @@ function HouseholdHome({ view }: { view: HouseholdView }) {
           </button>
         </header>
 
-        <ChoresSection />
+        <ChoresSection view={view} />
 
         <Card title="Members">
           <ul className="flex flex-col gap-1">

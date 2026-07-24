@@ -4,14 +4,16 @@
  * goes through a single `db.batch()` (D1 has no interactive transactions).
  */
 
-import { and, desc, eq } from 'drizzle-orm'
+import { and, desc, eq, ne } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import {
   applyCompletion,
   applyMissedPolicy,
+  type PostponeMode,
+  postpone,
   resolveTemporalStatus,
 } from '../shared/chore/lifecycle.ts'
-import { generateUpTo } from '../shared/chore/recurrence.ts'
+import { DEFAULT_DUE_TIME, generateUpTo } from '../shared/chore/recurrence.ts'
 import type {
   ChoreOccurrence,
   MissedPolicy,
@@ -20,9 +22,9 @@ import type {
   TemporalStatus,
 } from '../shared/chore/types.ts'
 import type { LocalDate } from '../shared/time/civil.ts'
-import { isoDate } from '../shared/time/civil.ts'
+import { addDays, isoDate } from '../shared/time/civil.ts'
 import type { TimeOfDay } from '../shared/time/zone.ts'
-import { localDateInZone } from '../shared/time/zone.ts'
+import { instantFromZoned, localDateInZone } from '../shared/time/zone.ts'
 import type { Db } from './db/index.ts'
 import {
   formatTimeOfDay,
@@ -266,5 +268,230 @@ export async function createTemplate(
   }
   await db.insert(choreTemplates).values(templateRow)
   await runBatch(db, await templateWrites(db, templateRow, timeZone, now))
+  return { id }
+}
+
+function activityWrite(
+  db: Db,
+  householdId: string,
+  occurrenceId: string,
+  actorId: string,
+  type: string,
+  now: number,
+): Write {
+  return db
+    .insert(activityEvents)
+    .values({ id: crypto.randomUUID(), householdId, occurrenceId, actorId, type, at: now })
+}
+
+/** Generate the follow-up occurrence after `resolvedId` is resolved (skipped/completed). */
+async function followUpWrites(
+  db: Db,
+  templateId: string,
+  resolvedId: string,
+  timeZone: string,
+  now: number,
+  lastCompletion?: LocalDate,
+): Promise<Write[]> {
+  const [templateRow] = await db
+    .select()
+    .from(choreTemplates)
+    .where(eq(choreTemplates.id, templateId))
+    .limit(1)
+  if (!templateRow || templateRow.status !== 'active') return []
+  const existing = (
+    await db.select().from(choreOccurrences).where(eq(choreOccurrences.templateId, templateId))
+  )
+    .map(toEngineOccurrence)
+    .map((o) => (o.id === resolvedId ? { ...o, state: 'skipped' as const } : o))
+  const seeds = generateUpTo(toEngineTemplate(templateRow), {
+    fromInstant: now,
+    horizonDays: HORIZON_DAYS,
+    timeZone,
+    existing,
+    lastCompletionDate: lastCompletion,
+  })
+  return seeds.map((seed) =>
+    db.insert(choreOccurrences).values(toOccurrenceRow(occurrenceFromSeed(seed), now)),
+  )
+}
+
+export async function skipOccurrence(
+  db: Db,
+  householdId: string,
+  timeZone: string,
+  occurrenceId: string,
+  memberId: string,
+  now: number,
+): Promise<'ok' | 'not-found'> {
+  const [row] = await db
+    .select()
+    .from(choreOccurrences)
+    .where(eq(choreOccurrences.id, occurrenceId))
+    .limit(1)
+  if (!row || row.householdId !== householdId) return 'not-found'
+  if (row.state !== 'scheduled') return 'ok'
+  const writes: Write[] = [
+    db
+      .update(choreOccurrences)
+      .set({ state: 'skipped', version: row.version + 1 })
+      .where(and(eq(choreOccurrences.id, occurrenceId), eq(choreOccurrences.version, row.version))),
+    activityWrite(db, householdId, occurrenceId, memberId, 'skipped', now),
+  ]
+  if (row.templateId) {
+    const last = await lastCompletionDate(db, row.templateId, timeZone)
+    writes.push(...(await followUpWrites(db, row.templateId, occurrenceId, timeZone, now, last)))
+  }
+  await runBatch(db, writes)
+  return 'ok'
+}
+
+export async function claimOccurrence(
+  db: Db,
+  householdId: string,
+  occurrenceId: string,
+  memberId: string,
+  now: number,
+): Promise<'ok' | 'not-found' | 'taken'> {
+  const [row] = await db
+    .select()
+    .from(choreOccurrences)
+    .where(eq(choreOccurrences.id, occurrenceId))
+    .limit(1)
+  if (!row || row.householdId !== householdId || row.state !== 'scheduled') return 'not-found'
+  if (row.responsibleId && row.responsibleId !== memberId) return 'taken'
+  await runBatch(db, [
+    db
+      .update(choreOccurrences)
+      .set({ responsibleId: memberId, version: row.version + 1 })
+      .where(and(eq(choreOccurrences.id, occurrenceId), eq(choreOccurrences.version, row.version))),
+    activityWrite(db, householdId, occurrenceId, memberId, 'claimed', now),
+  ])
+  return 'ok'
+}
+
+export async function postponeOccurrence(
+  db: Db,
+  householdId: string,
+  timeZone: string,
+  occurrenceId: string,
+  memberId: string,
+  mode: PostponeMode,
+  days: number,
+  now: number,
+): Promise<'ok' | 'not-found'> {
+  const [row] = await db
+    .select()
+    .from(choreOccurrences)
+    .where(eq(choreOccurrences.id, occurrenceId))
+    .limit(1)
+  if (!row || row.householdId !== householdId || row.state !== 'scheduled') return 'not-found'
+  const occ = toEngineOccurrence(row)
+  const newDueDate = addDays(occ.dueDate, days)
+
+  if (!row.templateId) {
+    await runBatch(db, [
+      db
+        .update(choreOccurrences)
+        .set({
+          dueDate: isoDate(newDueDate),
+          dueInstant: instantFromZoned(newDueDate, occ.dueTime ?? DEFAULT_DUE_TIME, timeZone),
+          postponedFrom: row.postponedFrom ?? row.dueDate,
+          version: row.version + 1,
+        })
+        .where(
+          and(eq(choreOccurrences.id, occurrenceId), eq(choreOccurrences.version, row.version)),
+        ),
+      activityWrite(db, householdId, occurrenceId, memberId, 'postponed', now),
+    ])
+    return 'ok'
+  }
+
+  const [templateRow] = await db
+    .select()
+    .from(choreTemplates)
+    .where(eq(choreTemplates.id, row.templateId))
+    .limit(1)
+  if (!templateRow) return 'not-found'
+  const moved = postpone(occ, mode, newDueDate, toEngineTemplate(templateRow), { timeZone })
+  const writes: Write[] = [
+    db
+      .update(choreOccurrences)
+      .set({
+        dueDate: isoDate(moved.occurrence.dueDate),
+        dueInstant: moved.occurrence.dueInstant,
+        postponedFrom: isoDate(moved.occurrence.postponedFrom ?? occ.dueDate),
+        version: row.version + 1,
+      })
+      .where(and(eq(choreOccurrences.id, occurrenceId), eq(choreOccurrences.version, row.version))),
+    activityWrite(db, householdId, occurrenceId, memberId, 'postponed', now),
+  ]
+  if (mode === 'thisAndFuture') {
+    writes.push(
+      db
+        .update(choreTemplates)
+        .set({ recurrence: moved.template.recurrence, version: templateRow.version + 1 })
+        .where(
+          and(
+            eq(choreTemplates.id, templateRow.id),
+            eq(choreTemplates.version, templateRow.version),
+          ),
+        ),
+    )
+    writes.push(
+      db
+        .update(choreOccurrences)
+        .set({ state: 'cancelled' })
+        .where(
+          and(
+            eq(choreOccurrences.templateId, templateRow.id),
+            eq(choreOccurrences.state, 'scheduled'),
+            ne(choreOccurrences.id, occurrenceId),
+          ),
+        ),
+    )
+  }
+  await runBatch(db, writes)
+  if (mode === 'thisAndFuture') {
+    const [updated] = await db
+      .select()
+      .from(choreTemplates)
+      .where(eq(choreTemplates.id, templateRow.id))
+      .limit(1)
+    if (updated) await runBatch(db, await templateWrites(db, updated, timeZone, now))
+  }
+  return 'ok'
+}
+
+export interface NewOneOff {
+  title: string
+  dueDate: LocalDate
+  dueTime?: TimeOfDay
+  priority?: number
+  responsibleId?: string
+}
+
+export async function createOneOff(
+  db: Db,
+  householdId: string,
+  timeZone: string,
+  now: number,
+  input: NewOneOff,
+): Promise<{ id: string }> {
+  const id = crypto.randomUUID()
+  await db.insert(choreOccurrences).values({
+    id,
+    householdId,
+    templateId: null,
+    dueDate: isoDate(input.dueDate),
+    dueTime: input.dueTime ? formatTimeOfDay(input.dueTime) : null,
+    dueInstant: instantFromZoned(input.dueDate, input.dueTime ?? DEFAULT_DUE_TIME, timeZone),
+    state: 'scheduled',
+    responsibleId: input.responsibleId ?? null,
+    title: input.title,
+    priority: input.priority ?? null,
+    generationKey: `oneoff:${id}`,
+    createdAt: now,
+  })
   return { id }
 }
