@@ -4,6 +4,7 @@ import { type FormEvent, type ReactNode, useState } from 'react'
 import { CATALOG, describeRecurrence } from '../shared/chore/catalog.ts'
 import {
   acceptInvite,
+  acceptSuggestion,
   addCatalogChore,
   addRoom,
   type CatalogChoreInput,
@@ -13,14 +14,17 @@ import {
   createHousehold,
   createInvite,
   createTask,
+  dismissSuggestion,
   getCurrentHousehold,
   getHistory,
   type HistoryWindow,
   type HouseholdView,
   listOccurrences,
+  listSuggestions,
   type MissedPolicy,
   type OccurrenceView,
   postponeOccurrence,
+  type SuggestionView,
   skipOccurrence,
   type TemporalStatus,
   updateSettings,
@@ -203,87 +207,116 @@ interface PostponeArgs {
 function OccurrenceRow({
   occ,
   memberName,
+  suggestion,
   onComplete,
   onSkip,
   onClaim,
   onPostpone,
+  onAccept,
+  onDismiss,
 }: {
   occ: OccurrenceView
   memberName: (id: string) => string
+  suggestion?: SuggestionView
   onComplete: (id: string) => void
   onSkip: (id: string) => void
   onClaim: (id: string) => void
   onPostpone: (args: PostponeArgs) => void
+  onAccept: (id: string) => void
+  onDismiss: (id: string) => void
 }) {
   return (
-    <li className="flex items-center justify-between gap-2 py-2">
-      <div className="flex flex-col">
-        <span className="font-medium">{occ.name}</span>
-        {occ.responsibleId ? (
-          <span className="text-base-content/50 text-xs">{memberName(occ.responsibleId)}</span>
-        ) : (
-          <span className="text-warning text-xs">Unassigned</span>
-        )}
-      </div>
-      <div className="flex items-center gap-1">
-        {occ.temporalStatus !== 'upcoming' && (
-          <button
-            type="button"
-            onClick={() => onComplete(occ.id)}
-            className="btn btn-primary btn-sm"
-          >
-            Done
-          </button>
-        )}
-        <div className="dropdown dropdown-end">
-          <button
-            type="button"
-            tabIndex={0}
-            aria-label="More actions"
-            className="btn btn-square btn-ghost btn-sm"
-          >
-            ⋯
-          </button>
-          <ul className="dropdown-content menu z-10 w-52 rounded-box border border-base-300 bg-base-100 p-1 shadow">
-            <li>
-              <button
-                type="button"
-                onClick={() => onPostpone({ id: occ.id, mode: 'this', days: 1 })}
-              >
-                Postpone to tomorrow
-              </button>
-            </li>
-            <li>
-              <button
-                type="button"
-                onClick={() => onPostpone({ id: occ.id, mode: 'this', days: 7 })}
-              >
-                Postpone 1 week
-              </button>
-            </li>
-            <li>
-              <button
-                type="button"
-                onClick={() => onPostpone({ id: occ.id, mode: 'thisAndFuture', days: 7 })}
-              >
-                Shift 1 week (and future)
-              </button>
-            </li>
-            <li>
-              <button type="button" onClick={() => onSkip(occ.id)}>
-                Skip
-              </button>
-            </li>
-            {!occ.responsibleId && (
+    <li className="flex flex-col gap-1 py-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-col">
+          <span className="font-medium">{occ.name}</span>
+          {occ.responsibleId ? (
+            <span className="text-base-content/50 text-xs">{memberName(occ.responsibleId)}</span>
+          ) : (
+            <span className="text-warning text-xs">Unassigned</span>
+          )}
+        </div>
+        <div className="flex items-center gap-1">
+          {occ.temporalStatus !== 'upcoming' && (
+            <button
+              type="button"
+              onClick={() => onComplete(occ.id)}
+              className="btn btn-primary btn-sm"
+            >
+              Done
+            </button>
+          )}
+          <div className="dropdown dropdown-end">
+            <button
+              type="button"
+              tabIndex={0}
+              aria-label="More actions"
+              className="btn btn-square btn-ghost btn-sm"
+            >
+              ⋯
+            </button>
+            <ul className="dropdown-content menu z-10 w-52 rounded-box border border-base-300 bg-base-100 p-1 shadow">
               <li>
-                <button type="button" onClick={() => onClaim(occ.id)}>
-                  Claim it
+                <button
+                  type="button"
+                  onClick={() => onPostpone({ id: occ.id, mode: 'this', days: 1 })}
+                >
+                  Postpone to tomorrow
                 </button>
               </li>
-            )}
-          </ul>
+              <li>
+                <button
+                  type="button"
+                  onClick={() => onPostpone({ id: occ.id, mode: 'this', days: 7 })}
+                >
+                  Postpone 1 week
+                </button>
+              </li>
+              <li>
+                <button
+                  type="button"
+                  onClick={() => onPostpone({ id: occ.id, mode: 'thisAndFuture', days: 7 })}
+                >
+                  Shift 1 week (and future)
+                </button>
+              </li>
+              <li>
+                <button type="button" onClick={() => onSkip(occ.id)}>
+                  Skip
+                </button>
+              </li>
+              {!occ.responsibleId && (
+                <li>
+                  <button type="button" onClick={() => onClaim(occ.id)}>
+                    Claim it
+                  </button>
+                </li>
+              )}
+            </ul>
+          </div>
         </div>
       </div>
+      {suggestion && (
+        <div className="flex items-center justify-between gap-2 rounded-box bg-base-200 px-2 py-1">
+          <span className="text-xs">💡 {suggestion.explanation}</span>
+          <span className="flex shrink-0 gap-1">
+            <button
+              type="button"
+              onClick={() => onAccept(suggestion.id)}
+              className="btn btn-primary btn-xs"
+            >
+              Accept
+            </button>
+            <button
+              type="button"
+              onClick={() => onDismiss(suggestion.id)}
+              className="btn btn-ghost btn-xs"
+            >
+              Dismiss
+            </button>
+          </span>
+        </div>
+      )}
     </li>
   )
 }
@@ -364,8 +397,14 @@ function ChoresSection({ view }: { view: HouseholdView }) {
   const [taskTitle, setTaskTitle] = useState('')
   const [catalogOpen, setCatalogOpen] = useState(false)
   const occurrences = useQuery({ queryKey: ['occurrences'], queryFn: listOccurrences })
+  const suggestions = useQuery({ queryKey: ['suggestions'], queryFn: listSuggestions })
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['occurrences'] })
+  // Accepting a suggestion regenerates occurrences, so refresh both lists.
+  const invalidateAll = () => {
+    queryClient.invalidateQueries({ queryKey: ['occurrences'] })
+    queryClient.invalidateQueries({ queryKey: ['suggestions'] })
+  }
   const complete = useMutation({ mutationFn: completeOccurrence, onSuccess: invalidate })
   const skip = useMutation({ mutationFn: skipOccurrence, onSuccess: invalidate })
   const claim = useMutation({ mutationFn: claimOccurrence, onSuccess: invalidate })
@@ -373,6 +412,11 @@ function ChoresSection({ view }: { view: HouseholdView }) {
     mutationFn: (args: PostponeArgs) => postponeOccurrence(args.id, args.mode, args.days),
     onSuccess: invalidate,
   })
+  const accept = useMutation({ mutationFn: acceptSuggestion, onSuccess: invalidateAll })
+  const dismiss = useMutation({ mutationFn: dismissSuggestion, onSuccess: invalidateAll })
+
+  const suggestionByTemplate = new Map<string, SuggestionView>()
+  for (const s of suggestions.data ?? []) suggestionByTemplate.set(s.templateId, s)
   const addChore = useMutation({
     mutationFn: () =>
       createChore(name, RECURRENCE_PRESETS[presetIndex]?.rule ?? {}, { rotate, missedPolicy }),
@@ -426,10 +470,13 @@ function ChoresSection({ view }: { view: HouseholdView }) {
                 key={occ.id}
                 occ={occ}
                 memberName={memberName}
+                suggestion={occ.templateId ? suggestionByTemplate.get(occ.templateId) : undefined}
                 onComplete={(id) => complete.mutate(id)}
                 onSkip={(id) => skip.mutate(id)}
                 onClaim={(id) => claim.mutate(id)}
                 onPostpone={(args) => postpone.mutate(args)}
+                onAccept={(id) => accept.mutate(id)}
+                onDismiss={(id) => dismiss.mutate(id)}
               />
             ))}
           </ul>

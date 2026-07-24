@@ -27,6 +27,7 @@ import { getHistory } from './history.ts'
 import { isInviteUsable, newInviteCode } from './invites.ts'
 import { pushConfigured, sendPush } from './push.ts'
 import { announceActivity } from './reminders.ts'
+import { acceptSuggestion, dismissSuggestion, listPendingSuggestions } from './suggestions.ts'
 
 type SessionUser = { id: string; email: string; name: string }
 
@@ -433,4 +434,45 @@ api.get('/history', async (c) => {
     Date.now(),
   )
   return c.json(history)
+})
+
+// --- Adaptive-scheduling suggestions (Phase 3a) ---
+
+api.get('/suggestions', async (c) => {
+  const user = c.get('user')
+  const ctx = await callerContext(c.env, user.id)
+  if (!ctx) return c.json({ error: 'no household' }, 404)
+  const items = await listPendingSuggestions(getDb(c.env.DB), ctx.household.id)
+  return c.json({ suggestions: items })
+})
+
+api.post('/suggestions/:id/accept', async (c) => {
+  const user = c.get('user')
+  const ctx = await callerContext(c.env, user.id)
+  if (!ctx) return c.json({ error: 'no household' }, 404)
+  const result = await acceptSuggestion(
+    getDb(c.env.DB),
+    ctx.household.id,
+    ctx.household.ianaTimeZone,
+    c.req.param('id'),
+    ctx.member.id,
+    Date.now(),
+  )
+  if (result === 'not-found') return c.json({ error: 'not found' }, 404)
+  return c.json({ ok: true })
+})
+
+api.post('/suggestions/:id/dismiss', async (c) => {
+  const user = c.get('user')
+  const ctx = await callerContext(c.env, user.id)
+  if (!ctx) return c.json({ error: 'no household' }, 404)
+  const result = await dismissSuggestion(
+    getDb(c.env.DB),
+    ctx.household.id,
+    c.req.param('id'),
+    ctx.member.id,
+    Date.now(),
+  )
+  if (result === 'not-found') return c.json({ error: 'not found' }, 404)
+  return c.json({ ok: true })
 })
