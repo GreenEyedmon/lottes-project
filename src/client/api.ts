@@ -1,5 +1,7 @@
 /** Typed fetch helpers for the household API. All calls are same-origin, cookie-authed. */
 
+import type { RecurrenceRule } from '../shared/chore/types.ts'
+
 export interface HouseholdView {
   household: {
     id: string
@@ -74,6 +76,17 @@ export function createChore(
   recurrence: Record<string, unknown>,
 ): Promise<{ id: string }> {
   return request('/api/templates', { method: 'POST', body: JSON.stringify({ name, recurrence }) })
+}
+
+export interface CatalogChoreInput {
+  name: string
+  recurrence: RecurrenceRule
+  estimatedEffortMinutes: number
+  category: string
+}
+
+export function addCatalogChore(input: CatalogChoreInput): Promise<{ id: string }> {
+  return request('/api/templates', { method: 'POST', body: JSON.stringify(input) })
 }
 
 export function skipOccurrence(id: string): Promise<{ ok: boolean }> {

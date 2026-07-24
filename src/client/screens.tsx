@@ -1,9 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { type FormEvent, type ReactNode, useState } from 'react'
+import { CATALOG, describeRecurrence } from '../shared/chore/catalog.ts'
 import {
   acceptInvite,
+  addCatalogChore,
   addRoom,
+  type CatalogChoreInput,
   claimOccurrence,
   completeOccurrence,
   createChore,
@@ -277,11 +280,79 @@ function OccurrenceRow({
   )
 }
 
+function CatalogModal({ onClose }: { onClose: () => void }) {
+  const queryClient = useQueryClient()
+  const [added, setAdded] = useState<Set<string>>(new Set())
+  const add = useMutation({
+    mutationFn: (input: CatalogChoreInput) => addCatalogChore(input),
+    onSuccess: (_data, input) => {
+      setAdded((prev) => new Set(prev).add(input.name))
+      queryClient.invalidateQueries({ queryKey: ['occurrences'] })
+    },
+  })
+
+  return (
+    <div className="modal modal-open">
+      <div className="modal-box max-w-lg">
+        <h3 className="font-semibold text-lg">Add from the catalog</h3>
+        <p className="text-base-content/60 text-sm">
+          Recommended starting frequencies — edit any of them anytime.
+        </p>
+        <div className="mt-3 flex flex-col gap-4">
+          {CATALOG.map((pack) => (
+            <div key={pack.category}>
+              <h4 className="font-semibold text-base-content/50 text-xs uppercase tracking-wide">
+                {pack.category}
+              </h4>
+              <ul className="mt-1 flex flex-col divide-y divide-base-200">
+                {pack.items.map((item) => (
+                  <li key={item.name} className="flex items-center justify-between gap-2 py-2">
+                    <div className="flex flex-col">
+                      <span className="font-medium">{item.name}</span>
+                      <span className="text-base-content/50 text-xs">
+                        {describeRecurrence(item.recurrence)} · {item.estimatedEffortMinutes} min
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={added.has(item.name)}
+                      onClick={() =>
+                        add.mutate({
+                          name: item.name,
+                          recurrence: item.recurrence,
+                          estimatedEffortMinutes: item.estimatedEffortMinutes,
+                          category: pack.category,
+                        })
+                      }
+                      className="btn btn-outline btn-xs"
+                    >
+                      {added.has(item.name) ? 'Added ✓' : 'Add'}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+        <div className="modal-action">
+          <button type="button" onClick={onClose} className="btn btn-sm">
+            Done
+          </button>
+        </div>
+      </div>
+      <button type="button" onClick={onClose} aria-label="Close catalog" className="modal-backdrop">
+        close
+      </button>
+    </div>
+  )
+}
+
 function ChoresSection({ view }: { view: HouseholdView }) {
   const queryClient = useQueryClient()
   const [name, setName] = useState('')
   const [presetIndex, setPresetIndex] = useState(0)
   const [taskTitle, setTaskTitle] = useState('')
+  const [catalogOpen, setCatalogOpen] = useState(false)
   const occurrences = useQuery({ queryKey: ['occurrences'], queryFn: listOccurrences })
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['occurrences'] })
@@ -320,7 +391,16 @@ function ChoresSection({ view }: { view: HouseholdView }) {
   return (
     <Card title="Chores & tasks">
       {groups.length === 0 && (
-        <p className="text-base-content/50 text-sm">Nothing scheduled — add one below.</p>
+        <div className="flex flex-col items-start gap-2">
+          <p className="text-base-content/50 text-sm">Nothing scheduled yet.</p>
+          <button
+            type="button"
+            onClick={() => setCatalogOpen(true)}
+            className="btn btn-primary btn-sm"
+          >
+            Add common chores
+          </button>
+        </div>
       )}
       {groups.map(({ status, items }) => (
         <div key={status} className="flex flex-col gap-1">
@@ -394,6 +474,15 @@ function ChoresSection({ view }: { view: HouseholdView }) {
           Add task
         </button>
       </form>
+
+      <button
+        type="button"
+        onClick={() => setCatalogOpen(true)}
+        className="btn btn-ghost btn-sm w-fit"
+      >
+        Browse catalog
+      </button>
+      {catalogOpen && <CatalogModal onClose={() => setCatalogOpen(false)} />}
     </Card>
   )
 }
