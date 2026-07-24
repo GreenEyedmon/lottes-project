@@ -5,6 +5,6 @@ import { defineConfig } from 'drizzle-kit'
 // driver/credentials are needed — migrations stay reviewable in-repo.
 export default defineConfig({
   dialect: 'sqlite',
-  schema: './src/worker/db/schema.ts',
+  schema: ['./src/worker/db/schema.ts', './src/worker/db/auth-schema.ts'],
   out: './migrations',
 })

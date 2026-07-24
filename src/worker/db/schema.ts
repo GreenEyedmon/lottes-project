@@ -125,6 +125,18 @@ export const activityEvents = sqliteTable(
   (t) => [index('activity_household_at_idx').on(t.householdId, t.at)],
 )
 
+export const invites = sqliteTable('invites', {
+  id: text('id').primaryKey(),
+  householdId: text('household_id')
+    .notNull()
+    .references(() => households.id),
+  code: text('code').notNull().unique(),
+  email: text('email'),
+  expiresAt: integer('expires_at').notNull(),
+  acceptedBy: text('accepted_by').references(() => members.id),
+  createdAt: integer('created_at').notNull(),
+})
+
 export const reminders = sqliteTable(
   'reminders',
   {
