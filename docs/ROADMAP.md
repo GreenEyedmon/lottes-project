@@ -115,17 +115,19 @@ says must be rock-solid.
 **Goal:** Multi-person households coordinate fairly, with notifications tuned so
 nobody abandons the app from overload.
 
-- **Chore catalog + onboarding recommendations** (rules-based, every suggestion
-  editable, "recommended starting frequency" phrasing).
-- **Claiming / reassignment** refinements and **rotation** assignment
-  (this week Rohit, next week Alex…).
-- **Missed-occurrence policies** surfaced and configurable per chore.
-- **Flexible notification settings**: per-type toggles, digest vs. immediate, activity
-  notifications, quiet hours, morning/evening digest — all timezone/DST-correct.
+- **(2a) ✅ Chore catalog + onboarding recommendations** (rules-based, every suggestion
+  editable, "recommended starting frequency" phrasing). — PR #11
+- **(2b) ✅ Rotation assignment** — round-robin across members, one turn each;
+  stateless anchor off the latest occurrence. — PR #12
+- **(2c) ✅ Missed-occurrence policies** surfaced and configurable per chore
+  (roll forward / pile up / let it go). — PR #13
+- **(2d) ✅ Flexible notification settings**: per-type toggles (reminders / digest /
+  activity), activity notifications ("Alex completed X"), quiet hours — all
+  timezone/DST-correct. — PR #14
 - **Workload analytics**: effort contributed, assigned vs. completed vs. voluntarily
-  picked up, distribution by week/month.
+  picked up, distribution by week/month. — delivered in Phase 1f (History section).
 
-**Exit:** fair coordination and controllable notifications for a shared household.
+**Exit:** ✅ fair coordination and controllable notifications for a shared household.
 
 ---
 
