@@ -24,6 +24,7 @@ describe('toEngineTemplate', () => {
       dueTime: '18:00',
       estimatedEffortMinutes: 15,
       defaultResponsibleId: 'alex',
+      rotate: false,
       version: 1,
       createdAt: 1000,
     } satisfies InferSelectModel<typeof choreTemplates>
@@ -54,6 +55,7 @@ describe('toEngineTemplate', () => {
       dueTime: null,
       estimatedEffortMinutes: null,
       defaultResponsibleId: null,
+      rotate: true,
       version: 3,
       createdAt: 1000,
     } satisfies InferSelectModel<typeof choreTemplates>

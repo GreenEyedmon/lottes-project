@@ -62,6 +62,8 @@ export const choreTemplates = sqliteTable(
     dueTime: text('due_time'),
     estimatedEffortMinutes: integer('estimated_effort_minutes'),
     defaultResponsibleId: text('default_responsible_id').references(() => members.id),
+    // When true, each generated occurrence rotates to the next household member (round-robin).
+    rotate: integer('rotate', { mode: 'boolean' }).notNull().default(false),
     version: integer('version').notNull().default(1),
     createdAt: integer('created_at').notNull(),
   },
