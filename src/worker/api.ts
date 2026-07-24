@@ -22,8 +22,9 @@ import {
   skipOccurrence,
 } from './chores.ts'
 import { getDb } from './db/index.ts'
-import { households, invites, members, rooms } from './db/schema.ts'
+import { households, invites, members, pushSubscriptions, rooms } from './db/schema.ts'
 import { isInviteUsable, newInviteCode } from './invites.ts'
+import { pushConfigured, sendPush } from './push.ts'
 
 type SessionUser = { id: string; email: string; name: string }
 
@@ -316,4 +317,68 @@ api.post('/tasks', async (c) => {
     dueTime: body.dueTime,
   })
   return c.json(result, 201)
+})
+
+// --- Web Push (step 1e-i) ---
+
+api.get('/push/vapid-public-key', (c) => c.json({ publicKey: c.env.VAPID_PUBLIC_KEY ?? null }))
+
+api.post('/push/subscribe', async (c) => {
+  const user = c.get('user')
+  const ctx = await callerContext(c.env, user.id)
+  if (!ctx) return c.json({ error: 'no household' }, 404)
+  const sub = await c.req.json<{ endpoint?: string; keys?: { p256dh?: string; auth?: string } }>()
+  if (!sub.endpoint || !sub.keys?.p256dh || !sub.keys.auth) {
+    return c.json({ error: 'invalid subscription' }, 400)
+  }
+  const db = getDb(c.env.DB)
+  const [existing] = await db
+    .select()
+    .from(pushSubscriptions)
+    .where(eq(pushSubscriptions.endpoint, sub.endpoint))
+    .limit(1)
+  if (existing) {
+    await db
+      .update(pushSubscriptions)
+      .set({ memberId: ctx.member.id })
+      .where(eq(pushSubscriptions.id, existing.id))
+  } else {
+    await db.insert(pushSubscriptions).values({
+      id: crypto.randomUUID(),
+      memberId: ctx.member.id,
+      endpoint: sub.endpoint,
+      p256dh: sub.keys.p256dh,
+      auth: sub.keys.auth,
+      createdAt: Date.now(),
+    })
+  }
+  return c.json({ ok: true }, 201)
+})
+
+api.post('/push/test', async (c) => {
+  const user = c.get('user')
+  const ctx = await callerContext(c.env, user.id)
+  if (!ctx) return c.json({ error: 'no household' }, 404)
+  if (!pushConfigured(c.env)) return c.json({ error: 'push not configured' }, 503)
+  const db = getDb(c.env.DB)
+  const subs = await db
+    .select()
+    .from(pushSubscriptions)
+    .where(eq(pushSubscriptions.memberId, ctx.member.id))
+  let sent = 0
+  for (const s of subs) {
+    try {
+      const status = await sendPush(c.env, s, {
+        title: 'Lottes Project',
+        body: 'Notifications are on 🎉',
+      })
+      if (status >= 200 && status < 300) sent++
+      else if (status === 404 || status === 410) {
+        await db.delete(pushSubscriptions).where(eq(pushSubscriptions.id, s.id))
+      }
+    } catch {
+      // Ignore a single failed endpoint; others still get delivered.
+    }
+  }
+  return c.json({ sent })
 })

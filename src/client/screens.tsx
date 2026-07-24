@@ -19,6 +19,7 @@ import {
   type TemporalStatus,
 } from './api.ts'
 import { authClient } from './auth-client.ts'
+import { type EnableResult, enableNotifications, sendTestNotification } from './push.ts'
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Something went wrong'
@@ -394,6 +395,54 @@ function ChoresSection({ view }: { view: HouseholdView }) {
   )
 }
 
+const ENABLE_MESSAGE: Record<Exclude<EnableResult, 'ok'>, string> = {
+  denied: 'Permission denied — enable notifications in your browser settings.',
+  unsupported: "This browser doesn't support push notifications.",
+  unconfigured: 'Push isn’t configured on the server yet.',
+}
+
+function NotificationsCard() {
+  const [result, setResult] = useState<EnableResult | null>(null)
+  const [tested, setTested] = useState<number | null>(null)
+  const enable = useMutation({ mutationFn: enableNotifications, onSuccess: setResult })
+  const test = useMutation({ mutationFn: sendTestNotification, onSuccess: setTested })
+
+  return (
+    <Card title="Notifications">
+      <button
+        type="button"
+        onClick={() => enable.mutate()}
+        disabled={enable.isPending}
+        className="btn btn-outline btn-sm w-fit"
+      >
+        {result === 'ok' ? 'Notifications on ✓' : 'Turn on notifications'}
+      </button>
+      {result && result !== 'ok' && (
+        <p className="text-base-content/60 text-xs">{ENABLE_MESSAGE[result]}</p>
+      )}
+      {result === 'ok' && (
+        <>
+          <button
+            type="button"
+            onClick={() => test.mutate()}
+            className="btn btn-ghost btn-sm w-fit"
+          >
+            Send a test
+          </button>
+          {tested !== null && (
+            <p className="text-base-content/60 text-xs">
+              {tested > 0 ? 'Sent — check your notifications.' : 'No active subscription got it.'}
+            </p>
+          )}
+        </>
+      )}
+      <p className="text-base-content/50 text-xs">
+        On iPhone, add this app to your Home Screen first to receive push.
+      </p>
+    </Card>
+  )
+}
+
 function HouseholdHome({ view }: { view: HouseholdView }) {
   const queryClient = useQueryClient()
   const [roomName, setRoomName] = useState('')
@@ -472,6 +521,8 @@ function HouseholdHome({ view }: { view: HouseholdView }) {
             </button>
           </form>
         </Card>
+
+        <NotificationsCard />
 
         {view.me.role === 'owner' && (
           <Card title="Invite">

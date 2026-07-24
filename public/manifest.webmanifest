@@ -1,0 +1,11 @@
+{
+  "name": "Lottes Project",
+  "short_name": "Lottes",
+  "description": "Household chores, scheduled and shared.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#1d232a",
+  "theme_color": "#1d232a",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

@@ -7,6 +7,11 @@ import './index.css'
 
 const queryClient = new QueryClient()
 
+// Register the service worker that receives Web Push and shows notifications.
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {})
+}
+
 const rootElement = document.getElementById('root')
 if (!rootElement) throw new Error('#root not found in index.html')
 
