@@ -219,6 +219,7 @@ api.post('/templates', async (c) => {
     roomId: body.roomId,
     estimatedEffortMinutes: body.estimatedEffortMinutes,
     defaultResponsibleId: body.defaultResponsibleId,
+    rotate: body.rotate,
   })
   return c.json(result, 201)
 })

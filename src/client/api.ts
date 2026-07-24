@@ -74,8 +74,12 @@ export function completeOccurrence(id: string): Promise<{ ok: boolean }> {
 export function createChore(
   name: string,
   recurrence: Record<string, unknown>,
+  rotate = false,
 ): Promise<{ id: string }> {
-  return request('/api/templates', { method: 'POST', body: JSON.stringify({ name, recurrence }) })
+  return request('/api/templates', {
+    method: 'POST',
+    body: JSON.stringify({ name, recurrence, rotate }),
+  })
 }
 
 export interface CatalogChoreInput {

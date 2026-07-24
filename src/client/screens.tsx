@@ -351,6 +351,7 @@ function ChoresSection({ view }: { view: HouseholdView }) {
   const queryClient = useQueryClient()
   const [name, setName] = useState('')
   const [presetIndex, setPresetIndex] = useState(0)
+  const [rotate, setRotate] = useState(false)
   const [taskTitle, setTaskTitle] = useState('')
   const [catalogOpen, setCatalogOpen] = useState(false)
   const occurrences = useQuery({ queryKey: ['occurrences'], queryFn: listOccurrences })
@@ -364,9 +365,10 @@ function ChoresSection({ view }: { view: HouseholdView }) {
     onSuccess: invalidate,
   })
   const addChore = useMutation({
-    mutationFn: () => createChore(name, RECURRENCE_PRESETS[presetIndex]?.rule ?? {}),
+    mutationFn: () => createChore(name, RECURRENCE_PRESETS[presetIndex]?.rule ?? {}, rotate),
     onSuccess: () => {
       setName('')
+      setRotate(false)
       invalidate()
     },
   })
@@ -450,6 +452,17 @@ function ChoresSection({ view }: { view: HouseholdView }) {
             </option>
           ))}
         </select>
+        {view.members.length > 1 && (
+          <label className="label cursor-pointer gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={rotate}
+              onChange={(e) => setRotate(e.target.checked)}
+              className="checkbox checkbox-sm"
+            />
+            <span title="Each turn goes to the next household member">Rotate</span>
+          </label>
+        )}
         <button type="submit" className="btn btn-neutral btn-sm">
           Add chore
         </button>

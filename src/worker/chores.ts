@@ -6,6 +6,7 @@
 
 import { and, desc, eq, ne } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
+import { rotatedResponsible } from '../shared/chore/assignment.ts'
 import {
   applyCompletion,
   applyMissedPolicy,
@@ -22,7 +23,7 @@ import type {
   TemporalStatus,
 } from '../shared/chore/types.ts'
 import type { LocalDate } from '../shared/time/civil.ts'
-import { addDays, isoDate } from '../shared/time/civil.ts'
+import { addDays, compareLocalDate, isoDate } from '../shared/time/civil.ts'
 import type { TimeOfDay } from '../shared/time/zone.ts'
 import { instantFromZoned, localDateInZone } from '../shared/time/zone.ts'
 import type { Db } from './db/index.ts'
@@ -33,7 +34,13 @@ import {
   toEngineTemplate,
   toOccurrenceRow,
 } from './db/mappers.ts'
-import { activityEvents, choreOccurrences, choreTemplates, completionEvents } from './db/schema.ts'
+import {
+  activityEvents,
+  choreOccurrences,
+  choreTemplates,
+  completionEvents,
+  members,
+} from './db/schema.ts'
 
 const HORIZON_DAYS = 28
 
@@ -42,6 +49,64 @@ type TemplateRow = typeof choreTemplates.$inferSelect
 
 function occurrenceFromSeed(seed: OccurrenceSeed): ChoreOccurrence {
   return { ...seed, id: crypto.randomUUID(), state: 'scheduled' }
+}
+
+/** Household members in stable join order — the rotation ring. */
+async function orderedMemberIds(db: Db, householdId: string): Promise<string[]> {
+  const rows = await db
+    .select({ id: members.id })
+    .from(members)
+    .where(eq(members.householdId, householdId))
+    .orderBy(members.createdAt)
+  return rows.map((r) => r.id)
+}
+
+/** The assignee of the latest-dated occurrence, i.e. who to rotate away from next. */
+function mostRecentResponsible(existing: readonly ChoreOccurrence[]): string | null {
+  let latest: ChoreOccurrence | null = null
+  for (const occ of existing) {
+    if (!latest || compareLocalDate(occ.dueDate, latest.dueDate) > 0) latest = occ
+  }
+  return latest?.responsibleId ?? null
+}
+
+/**
+ * Generate the insert statements to top a template up to the horizon, applying round-robin
+ * rotation when the template opts in. `existing` must already reflect the resolution being
+ * processed (e.g. the just-completed occurrence marked `completed`) so the engine's
+ * open-occurrence check and the rotation anchor both see the new state.
+ */
+async function generationWrites(
+  db: Db,
+  templateRow: TemplateRow,
+  existing: readonly ChoreOccurrence[],
+  timeZone: string,
+  now: number,
+  lastCompletion: LocalDate | undefined,
+): Promise<Write[]> {
+  const seeds = generateUpTo(toEngineTemplate(templateRow), {
+    fromInstant: now,
+    horizonDays: HORIZON_DAYS,
+    timeZone,
+    existing,
+    lastCompletionDate: lastCompletion,
+  })
+  if (seeds.length === 0) return []
+
+  let ring: string[] | null = null
+  let previous = mostRecentResponsible(existing)
+  const writes: Write[] = []
+  for (const seed of seeds) {
+    let occ = occurrenceFromSeed(seed)
+    if (templateRow.rotate) {
+      ring ??= await orderedMemberIds(db, templateRow.householdId)
+      const next = rotatedResponsible(ring, previous)
+      previous = next
+      occ = { ...occ, responsibleId: next ?? undefined }
+    }
+    writes.push(db.insert(choreOccurrences).values(toOccurrenceRow(occ, now)))
+  }
+  return writes
 }
 
 async function runBatch(db: Db, writes: Write[]): Promise<void> {
@@ -75,19 +140,15 @@ async function templateWrites(
     .where(eq(choreOccurrences.templateId, templateRow.id))
   const existing = rows.map(toEngineOccurrence)
 
-  const seeds = generateUpTo(template, {
-    fromInstant: now,
-    horizonDays: HORIZON_DAYS,
-    timeZone,
+  const writes = await generationWrites(
+    db,
+    templateRow,
     existing,
-    lastCompletionDate:
-      template.recurrence.mode === 'completionRelative'
-        ? await lastCompletionDate(db, templateRow.id, timeZone)
-        : undefined,
-  })
-
-  const writes: Write[] = seeds.map((seed) =>
-    db.insert(choreOccurrences).values(toOccurrenceRow(occurrenceFromSeed(seed), now)),
+    timeZone,
+    now,
+    template.recurrence.mode === 'completionRelative'
+      ? await lastCompletionDate(db, templateRow.id, timeZone)
+      : undefined,
   )
   for (const transition of applyMissedPolicy(template, existing, { now, timeZone })) {
     writes.push(
@@ -201,7 +262,6 @@ export async function completeOccurrence(
       .where(eq(choreTemplates.id, row.templateId))
       .limit(1)
     if (templateRow && templateRow.status === 'active') {
-      const template = toEngineTemplate(templateRow)
       const others = (
         await db
           .select()
@@ -210,18 +270,16 @@ export async function completeOccurrence(
       )
         .map(toEngineOccurrence)
         .map((o) => (o.id === occurrenceId ? { ...o, state: 'completed' as const } : o))
-      const seeds = generateUpTo(template, {
-        fromInstant: now,
-        horizonDays: HORIZON_DAYS,
-        timeZone,
-        existing: others,
-        lastCompletionDate: localDateInZone(now, timeZone),
-      })
-      for (const seed of seeds) {
-        writes.push(
-          db.insert(choreOccurrences).values(toOccurrenceRow(occurrenceFromSeed(seed), now)),
-        )
-      }
+      writes.push(
+        ...(await generationWrites(
+          db,
+          templateRow,
+          others,
+          timeZone,
+          now,
+          localDateInZone(now, timeZone),
+        )),
+      )
     }
   }
 
@@ -239,6 +297,7 @@ export interface NewTemplate {
   dueTime?: TimeOfDay
   estimatedEffortMinutes?: number
   defaultResponsibleId?: string
+  rotate?: boolean
 }
 
 /** Create a chore template and generate its first occurrences. */
@@ -263,6 +322,7 @@ export async function createTemplate(
     dueTime: input.dueTime ? formatTimeOfDay(input.dueTime) : null,
     estimatedEffortMinutes: input.estimatedEffortMinutes ?? null,
     defaultResponsibleId: input.defaultResponsibleId ?? null,
+    rotate: input.rotate ?? false,
     version: 1,
     createdAt: now,
   }
@@ -304,16 +364,7 @@ async function followUpWrites(
   )
     .map(toEngineOccurrence)
     .map((o) => (o.id === resolvedId ? { ...o, state: 'skipped' as const } : o))
-  const seeds = generateUpTo(toEngineTemplate(templateRow), {
-    fromInstant: now,
-    horizonDays: HORIZON_DAYS,
-    timeZone,
-    existing,
-    lastCompletionDate: lastCompletion,
-  })
-  return seeds.map((seed) =>
-    db.insert(choreOccurrences).values(toOccurrenceRow(occurrenceFromSeed(seed), now)),
-  )
+  return generationWrites(db, templateRow, existing, timeZone, now, lastCompletion)
 }
 
 export async function skipOccurrence(

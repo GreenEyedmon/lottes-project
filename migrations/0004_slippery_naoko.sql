@@ -1,0 +1,1 @@
+ALTER TABLE `chore_templates` ADD `rotate` integer DEFAULT false NOT NULL;
