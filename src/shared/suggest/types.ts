@@ -92,3 +92,24 @@ export interface DueTimeSuggestion {
   explanation: string
   evidence: DueTimeEvidence
 }
+
+/** How many times each member completed a chore over the window. */
+export interface MemberTally {
+  memberId: string
+  completed: number
+}
+
+export interface RotationSignals {
+  rotateEnabled: boolean
+  /** Household size — rotation needs at least two people. */
+  memberCount: number
+  tally: readonly MemberTally[]
+}
+
+export type RotationEvidence = { sampleSize: number; topCompleted: number }
+
+export interface RotationSuggestion {
+  kind: 'enableRotation'
+  explanation: string
+  evidence: RotationEvidence
+}

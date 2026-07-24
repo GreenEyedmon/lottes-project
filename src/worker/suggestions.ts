@@ -8,6 +8,7 @@
 import { and, eq, gte } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import { analyzeFrequency } from '../shared/suggest/frequency.ts'
+import { analyzeRotation } from '../shared/suggest/rotation.ts'
 import { analyzeDueTime, analyzeWeekday } from '../shared/suggest/timing.ts'
 import type { CompletionMoment, SuggestionKind, SuggestionPatch } from '../shared/suggest/types.ts'
 import { isoWeekday } from '../shared/time/civil.ts'
@@ -15,7 +16,13 @@ import { zonedPartsFromInstant } from '../shared/time/zone.ts'
 import { applyTemplateChange } from './chores.ts'
 import type { Db } from './db/index.ts'
 import { toEngineTemplate } from './db/mappers.ts'
-import { choreOccurrences, choreTemplates, completionEvents, suggestions } from './db/schema.ts'
+import {
+  choreOccurrences,
+  choreTemplates,
+  completionEvents,
+  members,
+  suggestions,
+} from './db/schema.ts'
 
 type Write = BatchItem<'sqlite'>
 
@@ -44,6 +51,8 @@ interface Behavior {
   early: number
   postponed: number
   moments: CompletionMoment[]
+  /** Completions per member — the rotation-fairness tally. */
+  byMember: Map<string, number>
 }
 
 /** Recompute and persist suggestions for one household. Idempotent per `(template, kind)`. */
@@ -59,11 +68,16 @@ export async function generateSuggestionsForHousehold(
     .where(and(eq(choreTemplates.householdId, householdId), eq(choreTemplates.status, 'active')))
   if (templates.length === 0) return
 
-  // One pass over recently completed occurrences → per-template behavior (counts + when).
+  const memberCount = (
+    await db.select({ id: members.id }).from(members).where(eq(members.householdId, householdId))
+  ).length
+
+  // One pass over recently completed occurrences → per-template behavior (counts + when + who).
   const rows = await db
     .select({
       templateId: choreOccurrences.templateId,
       completedAt: completionEvents.completedAt,
+      completedById: completionEvents.completedById,
       wasLate: completionEvents.wasLate,
       wasEarly: completionEvents.wasEarly,
       postponedFrom: choreOccurrences.postponedFrom,
@@ -81,13 +95,21 @@ export async function generateSuggestionsForHousehold(
     if (!row.templateId) continue
     let behavior = behaviorByTemplate.get(row.templateId)
     if (!behavior) {
-      behavior = { sampleSize: 0, late: 0, early: 0, postponed: 0, moments: [] }
+      behavior = {
+        sampleSize: 0,
+        late: 0,
+        early: 0,
+        postponed: 0,
+        moments: [],
+        byMember: new Map(),
+      }
       behaviorByTemplate.set(row.templateId, behavior)
     }
     behavior.sampleSize++
     if (row.wasLate) behavior.late++
     if (row.wasEarly) behavior.early++
     if (row.postponedFrom) behavior.postponed++
+    behavior.byMember.set(row.completedById, (behavior.byMember.get(row.completedById) ?? 0) + 1)
     const parts = zonedPartsFromInstant(row.completedAt, timeZone)
     behavior.moments.push({
       weekday: isoWeekday({ year: parts.year, month: parts.month, day: parts.day }),
@@ -151,6 +173,19 @@ export async function generateSuggestionsForHousehold(
         patch: { dueTime: dueTime.proposedDueTime },
         explanation: dueTime.explanation,
         evidence: dueTime.evidence,
+      })
+    }
+    const rotation = analyzeRotation({
+      rotateEnabled: template.rotate,
+      memberCount,
+      tally: [...behavior.byMember].map(([memberId, completed]) => ({ memberId, completed })),
+    })
+    if (rotation) {
+      candidates.push({
+        kind: rotation.kind,
+        patch: { rotate: true },
+        explanation: rotation.explanation,
+        evidence: rotation.evidence,
       })
     }
 
