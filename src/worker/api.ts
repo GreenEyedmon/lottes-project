@@ -5,7 +5,15 @@
 
 import { eq } from 'drizzle-orm'
 import { Hono } from 'hono'
+import type { RecurrenceRule } from '../shared/chore/types.ts'
+import { localDateInZone } from '../shared/time/zone.ts'
 import { getSessionUser } from './auth.ts'
+import {
+  completeOccurrence,
+  createTemplate,
+  listOpenOccurrences,
+  type NewTemplate,
+} from './chores.ts'
 import { getDb } from './db/index.ts'
 import { households, invites, members, rooms } from './db/schema.ts'
 import { isInviteUsable, newInviteCode } from './invites.ts'
@@ -160,4 +168,72 @@ api.delete('/rooms/:id', async (c) => {
   if (!room || room.householdId !== householdId) return c.json({ error: 'not found' }, 404)
   await db.delete(rooms).where(eq(rooms.id, room.id))
   return c.body(null, 204)
+})
+
+// --- Chores (step 1c) ---
+
+/** Resolve the caller's member + household (with its timezone), or null. */
+async function callerContext(env: Env, userId: string) {
+  const db = getDb(env.DB)
+  const [member] = await db.select().from(members).where(eq(members.userId, userId)).limit(1)
+  if (!member) return null
+  const [household] = await db
+    .select()
+    .from(households)
+    .where(eq(households.id, member.householdId))
+    .limit(1)
+  return household ? { member, household } : null
+}
+
+api.post('/templates', async (c) => {
+  const user = c.get('user')
+  const ctx = await callerContext(c.env, user.id)
+  if (!ctx) return c.json({ error: 'no household' }, 404)
+  const body = await c.req.json<Partial<NewTemplate> & { recurrence?: RecurrenceRule }>()
+  if (!body.name || !body.recurrence) {
+    return c.json({ error: 'name and recurrence are required' }, 400)
+  }
+  const now = Date.now()
+  const timeZone = ctx.household.ianaTimeZone
+  const result = await createTemplate(getDb(c.env.DB), ctx.household.id, timeZone, now, {
+    name: body.name,
+    recurrence: body.recurrence,
+    missedPolicy: body.missedPolicy ?? 'collapse',
+    startDate: body.startDate ?? localDateInZone(now, timeZone),
+    dueTime: body.dueTime,
+    category: body.category,
+    roomId: body.roomId,
+    estimatedEffortMinutes: body.estimatedEffortMinutes,
+    defaultResponsibleId: body.defaultResponsibleId,
+  })
+  return c.json(result, 201)
+})
+
+api.get('/occurrences', async (c) => {
+  const user = c.get('user')
+  const ctx = await callerContext(c.env, user.id)
+  if (!ctx) return c.json({ error: 'no household' }, 404)
+  const occurrences = await listOpenOccurrences(
+    getDb(c.env.DB),
+    ctx.household.id,
+    ctx.household.ianaTimeZone,
+    Date.now(),
+  )
+  return c.json({ occurrences })
+})
+
+api.post('/occurrences/:id/complete', async (c) => {
+  const user = c.get('user')
+  const ctx = await callerContext(c.env, user.id)
+  if (!ctx) return c.json({ error: 'no household' }, 404)
+  const result = await completeOccurrence(
+    getDb(c.env.DB),
+    ctx.household.id,
+    ctx.household.ianaTimeZone,
+    c.req.param('id'),
+    ctx.member.id,
+    Date.now(),
+  )
+  if (result === 'not-found') return c.json({ error: 'not found' }, 404)
+  return c.json({ ok: true })
 })

@@ -42,3 +42,29 @@ export function acceptInvite(code: string): Promise<{ householdId: string }> {
 export function addRoom(name: string): Promise<{ id: string; name: string }> {
   return request('/api/rooms', { method: 'POST', body: JSON.stringify({ name }) })
 }
+
+export type TemporalStatus = 'upcoming' | 'due' | 'overdue'
+
+export interface OccurrenceView {
+  id: string
+  name: string
+  dueDate: string
+  temporalStatus: TemporalStatus
+  responsibleId: string | null
+}
+
+export async function listOccurrences(): Promise<OccurrenceView[]> {
+  const data = await request<{ occurrences: OccurrenceView[] }>('/api/occurrences')
+  return data.occurrences
+}
+
+export function completeOccurrence(id: string): Promise<{ ok: boolean }> {
+  return request(`/api/occurrences/${id}/complete`, { method: 'POST' })
+}
+
+export function createChore(
+  name: string,
+  recurrence: Record<string, unknown>,
+): Promise<{ id: string }> {
+  return request('/api/templates', { method: 'POST', body: JSON.stringify({ name, recurrence }) })
+}

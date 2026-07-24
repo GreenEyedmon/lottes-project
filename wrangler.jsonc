@@ -13,6 +13,10 @@
   "observability": {
     "enabled": true
   },
+  "triggers": {
+    // Daily occurrence generation + missed-policy sweep (03:00 UTC). Free on Workers.
+    "crons": ["0 3 * * *"]
+  },
   "vars": {
     // Better Auth base URL / trusted origin (public, not a secret).
     "APP_ORIGIN": "https://lottes-project.lotte-chores.workers.dev"

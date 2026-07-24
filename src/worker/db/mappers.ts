@@ -26,7 +26,7 @@ function parseTimeOfDay(value: string): TimeOfDay {
   return { hour: Number(parts[0]), minute: Number(parts[1]) }
 }
 
-function formatTimeOfDay(time: TimeOfDay): string {
+export function formatTimeOfDay(time: TimeOfDay): string {
   return `${String(time.hour).padStart(2, '0')}:${String(time.minute).padStart(2, '0')}`
 }
 
