@@ -114,3 +114,29 @@ export function updateSettings(
     body: JSON.stringify(settings),
   })
 }
+
+export type HistoryWindow = 'week' | 'month'
+
+export interface TallyEntry {
+  memberId: string
+  name: string
+  completed: number
+  effortMinutes: number
+}
+
+export interface ActivityEntry {
+  id: string
+  text: string
+  at: number
+}
+
+export interface HistoryView {
+  window: HistoryWindow
+  tally: TallyEntry[]
+  totalEffort: number
+  activity: ActivityEntry[]
+}
+
+export function getHistory(window: HistoryWindow): Promise<HistoryView> {
+  return request(`/api/history?window=${window}`)
+}
