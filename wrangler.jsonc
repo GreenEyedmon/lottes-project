@@ -5,11 +5,17 @@
   "compatibility_date": "2026-07-23",
   "compatibility_flags": ["nodejs_compat"],
   "assets": {
-    // SPA: unmatched routes fall back to index.html so client-side routing works.
-    "not_found_handling": "single-page-application"
+    // The Worker owns /api/*; every other path serves the SPA's index.html so
+    // client-side routes (e.g. /join) and deep links work instead of 404ing.
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
   },
   "observability": {
     "enabled": true
+  },
+  "vars": {
+    // Better Auth base URL / trusted origin (public, not a secret).
+    "APP_ORIGIN": "https://lottes-project.lotte-chores.workers.dev"
   },
   "d1_databases": [
     {

@@ -31,11 +31,15 @@ export function SignIn({ callbackURL }: { callbackURL?: string }) {
   const [sent, setSent] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Email addresses are case-insensitive in practice; normalize so a stray capital
+  // doesn't create a second identity or trip provider-side exact-match checks.
+  const normalizedEmail = email.trim().toLowerCase()
+
   async function submit(event: FormEvent) {
     event.preventDefault()
     setError(null)
     const result = await authClient.signIn.magicLink({
-      email,
+      email: normalizedEmail,
       callbackURL: callbackURL ?? window.location.origin,
     })
     if (result.error) setError(result.error.message ?? 'Could not send the link')
@@ -46,7 +50,7 @@ export function SignIn({ callbackURL }: { callbackURL?: string }) {
     return (
       <Screen>
         <h1 className="font-semibold text-2xl">Check your email</h1>
-        <p className="text-neutral-500 text-sm">We sent a sign-in link to {email}.</p>
+        <p className="text-neutral-500 text-sm">We sent a sign-in link to {normalizedEmail}.</p>
       </Screen>
     )
   }

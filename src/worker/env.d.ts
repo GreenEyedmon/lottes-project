@@ -8,10 +8,9 @@ declare global {
     BETTER_AUTH_SECRET: string
     /** Resend API key for magic-link email. Optional — absent ⇒ links are logged. */
     RESEND_API_KEY?: string
-    /** Public origin of the app, e.g. https://lottes-project.lotte-chores.workers.dev */
-    APP_ORIGIN?: string
     /** From address for outgoing mail. Defaults to Resend's onboarding sender. */
     APP_EMAIL_FROM?: string
+    // APP_ORIGIN is a wrangler.jsonc `var`, so it's typed by generated worker types.
   }
 }
 
