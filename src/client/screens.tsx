@@ -4,10 +4,14 @@ import { type FormEvent, type ReactNode, useState } from 'react'
 import {
   acceptInvite,
   addRoom,
+  completeOccurrence,
+  createChore,
   createHousehold,
   createInvite,
   getCurrentHousehold,
   type HouseholdView,
+  listOccurrences,
+  type TemporalStatus,
 } from './api.ts'
 import { authClient } from './auth-client.ts'
 
@@ -116,6 +120,102 @@ export function CreateHousehold() {
   )
 }
 
+const RECURRENCE_PRESETS: { label: string; rule: Record<string, unknown> }[] = [
+  { label: 'Every day', rule: { mode: 'fixedWeekly', weekdays: [1, 2, 3, 4, 5, 6, 7] } },
+  { label: 'Every Monday', rule: { mode: 'fixedWeekly', weekdays: [1] } },
+  { label: 'Every Saturday', rule: { mode: 'fixedWeekly', weekdays: [6] } },
+  { label: 'Every 2 weeks (after done)', rule: { mode: 'completionRelative', everyDays: 14 } },
+]
+
+const STATUS_ORDER: Record<TemporalStatus, number> = { overdue: 0, due: 1, upcoming: 2 }
+const STATUS_LABEL: Record<TemporalStatus, string> = {
+  overdue: 'Overdue',
+  due: 'Today',
+  upcoming: 'Upcoming',
+}
+
+function ChoresSection() {
+  const queryClient = useQueryClient()
+  const [name, setName] = useState('')
+  const [presetIndex, setPresetIndex] = useState(0)
+  const occurrences = useQuery({ queryKey: ['occurrences'], queryFn: listOccurrences })
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['occurrences'] })
+  const complete = useMutation({ mutationFn: completeOccurrence, onSuccess: invalidate })
+  const add = useMutation({
+    mutationFn: () => createChore(name, RECURRENCE_PRESETS[presetIndex]?.rule ?? {}),
+    onSuccess: () => {
+      setName('')
+      invalidate()
+    },
+  })
+
+  const sorted = [...(occurrences.data ?? [])].sort(
+    (a, b) =>
+      STATUS_ORDER[a.temporalStatus] - STATUS_ORDER[b.temporalStatus] ||
+      a.dueDate.localeCompare(b.dueDate),
+  )
+
+  return (
+    <section className="flex flex-col gap-2">
+      <h2 className="font-medium text-neutral-500 text-sm">Chores</h2>
+      <ul className="flex flex-col gap-1">
+        {sorted.map((occ) => (
+          <li key={occ.id} className="flex items-center justify-between gap-2">
+            <span>
+              <span className={occ.temporalStatus === 'overdue' ? 'text-red-600' : ''}>
+                {occ.name}
+              </span>
+              <span className="ml-2 text-neutral-400 text-xs">
+                {STATUS_LABEL[occ.temporalStatus]}
+              </span>
+            </span>
+            <button
+              type="button"
+              onClick={() => complete.mutate(occ.id)}
+              className="rounded border border-neutral-300 px-2 text-sm"
+            >
+              Done
+            </button>
+          </li>
+        ))}
+        {sorted.length === 0 && <li className="text-neutral-400">No chores yet</li>}
+      </ul>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          add.mutate()
+        }}
+        className="mt-1 flex gap-2"
+      >
+        <input
+          required
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Vacuum living room"
+          aria-label="Chore name"
+          className={`flex-1 ${input}`}
+        />
+        <select
+          value={presetIndex}
+          onChange={(e) => setPresetIndex(Number(e.target.value))}
+          aria-label="Recurrence"
+          className={input}
+        >
+          {RECURRENCE_PRESETS.map((preset, i) => (
+            <option key={preset.label} value={i}>
+              {preset.label}
+            </option>
+          ))}
+        </select>
+        <button type="submit" className="rounded bg-neutral-900 px-3 text-white">
+          Add
+        </button>
+      </form>
+    </section>
+  )
+}
+
 function HouseholdHome({ view }: { view: HouseholdView }) {
   const queryClient = useQueryClient()
   const [roomName, setRoomName] = useState('')
@@ -147,6 +247,8 @@ function HouseholdHome({ view }: { view: HouseholdView }) {
           Sign out
         </button>
       </div>
+
+      <ChoresSection />
 
       <section>
         <h2 className="font-medium text-neutral-500 text-sm">Members</h2>
