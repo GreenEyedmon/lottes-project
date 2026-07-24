@@ -14,8 +14,9 @@
     "enabled": true
   },
   "triggers": {
-    // Daily occurrence generation + missed-policy sweep (03:00 UTC). Free on Workers.
-    "crons": ["0 3 * * *"]
+    // Daily generation + missed-policy sweep (03:00 UTC), and a 5-minute reminder pass
+    // (timed reminders + daily digest). Free on Workers.
+    "crons": ["0 3 * * *", "*/5 * * * *"]
   },
   "vars": {
     // Better Auth base URL / trusted origin (public, not a secret).

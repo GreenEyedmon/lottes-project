@@ -17,6 +17,7 @@ import {
   postponeOccurrence,
   skipOccurrence,
   type TemporalStatus,
+  updateSettings,
 } from './api.ts'
 import { authClient } from './auth-client.ts'
 import { type EnableResult, enableNotifications, sendTestNotification } from './push.ts'
@@ -443,6 +444,78 @@ function NotificationsCard() {
   )
 }
 
+const HOURS = Array.from({ length: 24 }, (_, i) => i)
+const hourLabel = (h: number): string => `${String(h).padStart(2, '0')}:00`
+
+function HourSelect({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value: number
+  onChange: (value: number) => void
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(Number(e.target.value))}
+      aria-label={label}
+      className="select select-bordered select-sm w-24"
+    >
+      {HOURS.map((h) => (
+        <option key={h} value={h}>
+          {hourLabel(h)}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+function SettingsCard({ view }: { view: HouseholdView }) {
+  const queryClient = useQueryClient()
+  const [digest, setDigest] = useState(view.household.digestHour)
+  const [quietStart, setQuietStart] = useState(view.household.quietStartHour)
+  const [quietEnd, setQuietEnd] = useState(view.household.quietEndHour)
+  const save = useMutation({
+    mutationFn: () =>
+      updateSettings(view.household.id, {
+        digestHour: digest,
+        quietStartHour: quietStart,
+        quietEndHour: quietEnd,
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['household'] }),
+  })
+
+  return (
+    <Card title="Notification settings">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          save.mutate()
+        }}
+        className="flex flex-col gap-3"
+      >
+        <div className="flex items-center justify-between gap-2 text-sm">
+          <span>Daily digest at</span>
+          <HourSelect label="Digest hour" value={digest} onChange={setDigest} />
+        </div>
+        <div className="flex items-center justify-between gap-2 text-sm">
+          <span>Quiet hours</span>
+          <span className="flex items-center gap-1">
+            <HourSelect label="Quiet start hour" value={quietStart} onChange={setQuietStart} />
+            <span className="text-base-content/50">to</span>
+            <HourSelect label="Quiet end hour" value={quietEnd} onChange={setQuietEnd} />
+          </span>
+        </div>
+        <button type="submit" className="btn btn-outline btn-sm w-fit">
+          {save.isSuccess ? 'Saved ✓' : 'Save'}
+        </button>
+      </form>
+    </Card>
+  )
+}
+
 function HouseholdHome({ view }: { view: HouseholdView }) {
   const queryClient = useQueryClient()
   const [roomName, setRoomName] = useState('')
@@ -523,6 +596,8 @@ function HouseholdHome({ view }: { view: HouseholdView }) {
         </Card>
 
         <NotificationsCard />
+
+        {view.me.role === 'owner' && <SettingsCard view={view} />}
 
         {view.me.role === 'owner' && (
           <Card title="Invite">

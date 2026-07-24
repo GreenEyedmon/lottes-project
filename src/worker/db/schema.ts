@@ -12,6 +12,10 @@ export const households = sqliteTable('households', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   ianaTimeZone: text('iana_time_zone').notNull(),
+  // Local hour (0-23) for the daily digest, and the quiet-hours window.
+  digestHour: integer('digest_hour').notNull().default(8),
+  quietStartHour: integer('quiet_start_hour').notNull().default(22),
+  quietEndHour: integer('quiet_end_hour').notNull().default(7),
   createdAt: integer('created_at').notNull(),
 })
 
@@ -156,9 +160,8 @@ export const reminders = sqliteTable(
   'reminders',
   {
     id: text('id').primaryKey(),
-    occurrenceId: text('occurrence_id')
-      .notNull()
-      .references(() => choreOccurrences.id),
+    // Null for a household digest (no single occurrence).
+    occurrenceId: text('occurrence_id').references(() => choreOccurrences.id),
     remindAt: integer('remind_at').notNull(),
     channel: text('channel', { enum: ['push', 'email'] }).notNull(),
     sentAt: integer('sent_at'),

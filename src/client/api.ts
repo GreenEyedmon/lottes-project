@@ -1,7 +1,14 @@
 /** Typed fetch helpers for the household API. All calls are same-origin, cookie-authed. */
 
 export interface HouseholdView {
-  household: { id: string; name: string; ianaTimeZone: string }
+  household: {
+    id: string
+    name: string
+    ianaTimeZone: string
+    digestHour: number
+    quietStartHour: number
+    quietEndHour: number
+  }
   me: { id: string; displayName: string; role: string }
   members: { id: string; displayName: string; role: string }[]
   rooms: { id: string; name: string }[]
@@ -90,4 +97,20 @@ export function postponeOccurrence(
 
 export function createTask(title: string): Promise<{ id: string }> {
   return request('/api/tasks', { method: 'POST', body: JSON.stringify({ title }) })
+}
+
+export interface NotificationSettings {
+  digestHour: number
+  quietStartHour: number
+  quietEndHour: number
+}
+
+export function updateSettings(
+  id: string,
+  settings: NotificationSettings,
+): Promise<{ ok: boolean }> {
+  return request(`/api/households/${id}/settings`, {
+    method: 'POST',
+    body: JSON.stringify(settings),
+  })
 }

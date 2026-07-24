@@ -382,3 +382,27 @@ api.post('/push/test', async (c) => {
   }
   return c.json({ sent })
 })
+
+api.post('/households/:id/settings', async (c) => {
+  const user = c.get('user')
+  const ctx = await callerContext(c.env, user.id)
+  if (!ctx || ctx.household.id !== c.req.param('id') || ctx.member.role !== 'owner') {
+    return c.json({ error: 'forbidden' }, 403)
+  }
+  const body = await c.req.json<{
+    digestHour?: number
+    quietStartHour?: number
+    quietEndHour?: number
+  }>()
+  const clampHour = (value: number | undefined, fallback: number): number =>
+    typeof value === 'number' && value >= 0 && value <= 23 ? Math.floor(value) : fallback
+  await getDb(c.env.DB)
+    .update(households)
+    .set({
+      digestHour: clampHour(body.digestHour, ctx.household.digestHour),
+      quietStartHour: clampHour(body.quietStartHour, ctx.household.quietStartHour),
+      quietEndHour: clampHour(body.quietEndHour, ctx.household.quietEndHour),
+    })
+    .where(eq(households.id, ctx.household.id))
+  return c.json({ ok: true })
+})
