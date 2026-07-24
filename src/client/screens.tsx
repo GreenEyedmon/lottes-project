@@ -207,7 +207,7 @@ interface PostponeArgs {
 function OccurrenceRow({
   occ,
   memberName,
-  suggestion,
+  suggestions,
   onComplete,
   onSkip,
   onClaim,
@@ -217,7 +217,7 @@ function OccurrenceRow({
 }: {
   occ: OccurrenceView
   memberName: (id: string) => string
-  suggestion?: SuggestionView
+  suggestions?: SuggestionView[]
   onComplete: (id: string) => void
   onSkip: (id: string) => void
   onClaim: (id: string) => void
@@ -296,8 +296,11 @@ function OccurrenceRow({
           </div>
         </div>
       </div>
-      {suggestion && (
-        <div className="flex items-center justify-between gap-2 rounded-box bg-base-200 px-2 py-1">
+      {suggestions?.map((suggestion) => (
+        <div
+          key={suggestion.id}
+          className="flex items-center justify-between gap-2 rounded-box bg-base-200 px-2 py-1"
+        >
           <span className="text-xs">💡 {suggestion.explanation}</span>
           <span className="flex shrink-0 gap-1">
             <button
@@ -316,7 +319,7 @@ function OccurrenceRow({
             </button>
           </span>
         </div>
-      )}
+      ))}
     </li>
   )
 }
@@ -415,8 +418,12 @@ function ChoresSection({ view }: { view: HouseholdView }) {
   const accept = useMutation({ mutationFn: acceptSuggestion, onSuccess: invalidateAll })
   const dismiss = useMutation({ mutationFn: dismissSuggestion, onSuccess: invalidateAll })
 
-  const suggestionByTemplate = new Map<string, SuggestionView>()
-  for (const s of suggestions.data ?? []) suggestionByTemplate.set(s.templateId, s)
+  const suggestionsByTemplate = new Map<string, SuggestionView[]>()
+  for (const s of suggestions.data ?? []) {
+    const list = suggestionsByTemplate.get(s.templateId) ?? []
+    list.push(s)
+    suggestionsByTemplate.set(s.templateId, list)
+  }
   const addChore = useMutation({
     mutationFn: () =>
       createChore(name, RECURRENCE_PRESETS[presetIndex]?.rule ?? {}, { rotate, missedPolicy }),
@@ -470,7 +477,7 @@ function ChoresSection({ view }: { view: HouseholdView }) {
                 key={occ.id}
                 occ={occ}
                 memberName={memberName}
-                suggestion={occ.templateId ? suggestionByTemplate.get(occ.templateId) : undefined}
+                suggestions={occ.templateId ? suggestionsByTemplate.get(occ.templateId) : undefined}
                 onComplete={(id) => complete.mutate(id)}
                 onSkip={(id) => skip.mutate(id)}
                 onClaim={(id) => claim.mutate(id)}

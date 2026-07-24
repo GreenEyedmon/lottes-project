@@ -35,7 +35,7 @@ export default {
     } else if (controller.cron === '0 4 * * 1') {
       const rows = await db.select().from(households)
       for (const household of rows) {
-        await generateSuggestionsForHousehold(db, household.id, now)
+        await generateSuggestionsForHousehold(db, household.id, household.ianaTimeZone, now)
       }
     } else {
       await runReminders(db, env, now)
