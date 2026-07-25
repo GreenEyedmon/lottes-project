@@ -168,9 +168,9 @@ A separate module reusing the chores architecture. Lives behind an in-page
 - **(4a) ✅ Shared shopping list** — `grocery_items` + `shopping_entries` tables, add/
   remove, mark purchased, member attribution, the Shopping tab. (Price/store + category
   grouping UI in 4c.) — PR #19
-- **(4b) Replenishment intelligence** — pure median-interval engine (`src/shared/grocery/`)
+- **(4b) ✅ Replenishment intelligence** — pure median-interval engine (`src/shared/grocery/`)
   + tests; "usually every ~N days → probably running low" restock hints, computed on view,
-  one-tap add. This *is* the lightweight pantry estimate (a signal, not an inventory count).
+  one-tap add. This *is* the lightweight pantry estimate (a signal, not an inventory count). — PR #20
 - **(4c) List ergonomics** — category grouping, quantity + units, recent-items quick-add.
 
 Deferred (per the spec): detailed pantry inventory, receipt scanning, price analytics.
