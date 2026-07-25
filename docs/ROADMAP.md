@@ -147,13 +147,13 @@ Full-spec scope; suggestions surface **inline on the chore** they concern:
 - **(3c) ✅ Rotation-fairness suggestions** — `enableRotation` when a shared chore falls
   lopsidedly on one person (completion tally). Reorder deliberately dropped (round-robin
   is already order-independent). — PR #17
-- **(3d) `frequencyTarget` recurrence mode** — the third mode deferred from Phase 0;
-  flexible "~2×/week" placement. Pure engine work, independent of 3a–3c.
+- **(3d) ✅ `frequencyTarget` recurrence mode** — the third mode deferred from Phase 0;
+  flexible "~N×/week" evenly-spread placement, day-tolerant, no backlog. — PR #18
 
 Guardrails: analyzer stays pure + hard-tested; signals gathered with aggregate
 queries (well under the D1 50-query cap); no external ML — deterministic and local.
 
-**Exit:** the app proposes schedule improvements; the user stays in control.
+**Exit:** ✅ the app proposes schedule improvements; the user stays in control.
 
 ---
 
