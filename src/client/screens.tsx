@@ -16,11 +16,13 @@ import {
   createInvite,
   createTask,
   dismissSuggestion,
+  type GroceryItem,
   getCurrentHousehold,
   getHistory,
   getShopping,
   type HistoryWindow,
   type HouseholdView,
+  listGroceryItems,
   listOccurrences,
   listSuggestions,
   type MissedPolicy,
@@ -28,6 +30,7 @@ import {
   postponeOccurrence,
   purchaseShoppingEntry,
   removeShoppingEntry,
+  type ShoppingEntry,
   type SuggestionView,
   skipOccurrence,
   type TemporalStatus,
@@ -829,19 +832,67 @@ function HistorySection() {
   )
 }
 
+/** Group list entries by category; uncategorized fall under "Other", which sorts last. */
+function groupEntriesByCategory(
+  entries: ShoppingEntry[],
+): { category: string; items: ShoppingEntry[] }[] {
+  const groups = new Map<string, ShoppingEntry[]>()
+  for (const entry of entries) {
+    const key = entry.category?.trim() || 'Other'
+    const items = groups.get(key) ?? []
+    items.push(entry)
+    groups.set(key, items)
+  }
+  return [...groups.entries()]
+    .sort(([a], [b]) => (a === 'Other' ? 1 : b === 'Other' ? -1 : a.localeCompare(b)))
+    .map(([category, items]) => ({ category, items }))
+}
+
+/** Parse a decimal price string ("3.50") into whole cents; empty/invalid → undefined. */
+function parsePriceCents(value: string): number | undefined {
+  const trimmed = value.trim()
+  if (!trimmed) return undefined
+  const n = Number(trimmed)
+  return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) : undefined
+}
+
 function ShoppingSection({ view }: { view: HouseholdView }) {
   const queryClient = useQueryClient()
   const [name, setName] = useState('')
   const [quantity, setQuantity] = useState('')
+  const [category, setCategory] = useState('')
+  const [openId, setOpenId] = useState<string | null>(null) // row whose price/store editor is open
+  const [price, setPrice] = useState('')
+  const [store, setStore] = useState('')
+
   const list = useQuery({ queryKey: ['shopping'], queryFn: getShopping })
+  const catalog = useQuery({ queryKey: ['grocery-items'], queryFn: listGroceryItems })
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['shopping'] })
+  const closeDetail = () => {
+    setOpenId(null)
+    setPrice('')
+    setStore('')
+  }
+  const openDetail = (id: string) => {
+    setOpenId(id)
+    setPrice('')
+    setStore('')
+  }
+
   const add = useMutation({
-    mutationFn: () => addToShoppingList({ name, quantity: quantity.trim() || undefined }),
+    mutationFn: () =>
+      addToShoppingList({
+        name,
+        quantity: quantity.trim() || undefined,
+        category: category.trim() || undefined,
+      }),
     onSuccess: () => {
       setName('')
       setQuantity('')
+      setCategory('')
       invalidate()
+      void queryClient.invalidateQueries({ queryKey: ['grocery-items'] })
     },
   })
   const addItem = useMutation({
@@ -849,8 +900,12 @@ function ShoppingSection({ view }: { view: HouseholdView }) {
     onSuccess: invalidate,
   })
   const bought = useMutation({
-    mutationFn: (id: string) => purchaseShoppingEntry(id),
-    onSuccess: invalidate,
+    mutationFn: (args: { id: string; priceCents?: number; store?: string }) =>
+      purchaseShoppingEntry(args.id, { priceCents: args.priceCents, store: args.store }),
+    onSuccess: () => {
+      closeDetail()
+      invalidate()
+    },
   })
   const remove = useMutation({ mutationFn: removeShoppingEntry, onSuccess: invalidate })
 
@@ -859,6 +914,13 @@ function ShoppingSection({ view }: { view: HouseholdView }) {
 
   const entries = list.data?.entries ?? []
   const restock = list.data?.restock ?? []
+  const groups = groupEntriesByCategory(entries)
+
+  const onListIds = new Set(entries.map((e) => e.itemId))
+  const restockIds = new Set(restock.map((r) => r.itemId))
+  const quickAdd = (catalog.data ?? [])
+    .filter((item: GroceryItem) => !onListIds.has(item.id) && !restockIds.has(item.id))
+    .slice(0, 12)
 
   return (
     <Card title="Shopping list">
@@ -884,51 +946,99 @@ function ShoppingSection({ view }: { view: HouseholdView }) {
           ))}
         </div>
       )}
+
       {entries.length === 0 && <p className="text-base-content/50 text-sm">Nothing on the list.</p>}
-      {entries.length > 0 && (
-        <ul className="flex flex-col divide-y divide-base-200">
-          {entries.map((entry) => (
-            <li key={entry.id} className="flex items-center justify-between gap-2 py-2">
-              <div className="flex flex-col">
-                <span className="font-medium">
-                  {entry.name}
-                  {entry.quantity && (
-                    <span className="text-base-content/60"> · {entry.quantity}</span>
-                  )}
-                </span>
-                <span className="text-base-content/50 text-xs">
-                  {entry.category ? `${entry.category} · ` : ''}
-                  added by {memberName(entry.addedBy)}
-                </span>
-              </div>
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => bought.mutate(entry.id)}
-                  className="btn btn-primary btn-sm"
-                >
-                  Bought
-                </button>
-                <button
-                  type="button"
-                  onClick={() => remove.mutate(entry.id)}
-                  aria-label={`Remove ${entry.name}`}
-                  className="btn btn-square btn-ghost btn-sm"
-                >
-                  ✕
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
+
+      {groups.map(({ category: groupName, items }) => (
+        <div key={groupName} className="flex flex-col gap-1">
+          <p className="font-semibold text-base-content/50 text-xs uppercase tracking-wide">
+            {groupName}
+          </p>
+          <ul className="flex flex-col divide-y divide-base-200">
+            {items.map((entry) => (
+              <li key={entry.id} className="flex flex-col gap-1 py-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex flex-col">
+                    <span className="font-medium">
+                      {entry.name}
+                      {entry.quantity && (
+                        <span className="text-base-content/60"> · {entry.quantity}</span>
+                      )}
+                    </span>
+                    <span className="text-base-content/50 text-xs">
+                      added by {memberName(entry.addedBy)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => bought.mutate({ id: entry.id })}
+                      className="btn btn-primary btn-sm"
+                    >
+                      Bought
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => (openId === entry.id ? closeDetail() : openDetail(entry.id))}
+                      aria-label={`Log price and store for ${entry.name}`}
+                      className="btn btn-square btn-ghost btn-sm"
+                    >
+                      🧾
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => remove.mutate(entry.id)}
+                      aria-label={`Remove ${entry.name}`}
+                      className="btn btn-square btn-ghost btn-sm"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+                {openId === entry.id && (
+                  <div className="flex flex-wrap items-center gap-2 rounded-box bg-base-200 p-2">
+                    <input
+                      value={price}
+                      onChange={(e) => setPrice(e.target.value)}
+                      inputMode="decimal"
+                      placeholder="Price"
+                      aria-label="Price"
+                      className="input input-bordered input-xs w-20"
+                    />
+                    <input
+                      value={store}
+                      onChange={(e) => setStore(e.target.value)}
+                      placeholder="Store (optional)"
+                      aria-label="Store"
+                      className="input input-bordered input-xs flex-1"
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        bought.mutate({
+                          id: entry.id,
+                          priceCents: parsePriceCents(price),
+                          store: store.trim() || undefined,
+                        })
+                      }
+                      className="btn btn-primary btn-xs"
+                    >
+                      Bought
+                    </button>
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
 
       <form
         onSubmit={(e) => {
           e.preventDefault()
           add.mutate()
         }}
-        className="flex flex-col gap-2 sm:flex-row"
+        className="flex flex-col gap-2 sm:flex-row sm:flex-wrap"
       >
         <input
           required
@@ -941,14 +1051,41 @@ function ShoppingSection({ view }: { view: HouseholdView }) {
         <input
           value={quantity}
           onChange={(e) => setQuantity(e.target.value)}
-          placeholder="Qty (optional)"
+          placeholder="Qty"
           aria-label="Quantity"
+          className="input input-bordered input-sm sm:w-20"
+        />
+        <input
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+          placeholder="Category"
+          aria-label="Category"
           className="input input-bordered input-sm sm:w-28"
         />
         <button type="submit" className="btn btn-neutral btn-sm">
           Add
         </button>
       </form>
+
+      {quickAdd.length > 0 && (
+        <div className="flex flex-col gap-1">
+          <p className="font-semibold text-base-content/50 text-xs uppercase tracking-wide">
+            Quick add
+          </p>
+          <div className="flex flex-wrap gap-1">
+            {quickAdd.map((item: GroceryItem) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => addItem.mutate(item.id)}
+                className="btn btn-outline btn-xs"
+              >
+                {item.name} +
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </Card>
   )
 }
