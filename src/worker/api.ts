@@ -23,6 +23,14 @@ import {
 } from './chores.ts'
 import { getDb } from './db/index.ts'
 import { households, invites, members, pushSubscriptions, rooms } from './db/schema.ts'
+import {
+  addToList,
+  createItem,
+  listCatalog,
+  listShopping,
+  purchaseEntry,
+  removeEntry,
+} from './grocery.ts'
 import { getHistory } from './history.ts'
 import { isInviteUsable, newInviteCode } from './invites.ts'
 import { pushConfigured, sendPush } from './push.ts'
@@ -473,6 +481,81 @@ api.post('/suggestions/:id/dismiss', async (c) => {
     ctx.member.id,
     Date.now(),
   )
+  if (result === 'not-found') return c.json({ error: 'not found' }, 404)
+  return c.json({ ok: true })
+})
+
+// --- Grocery / shopping list (Phase 4a) ---
+
+api.get('/grocery/items', async (c) => {
+  const user = c.get('user')
+  const ctx = await callerContext(c.env, user.id)
+  if (!ctx) return c.json({ error: 'no household' }, 404)
+  const items = await listCatalog(getDb(c.env.DB), ctx.household.id)
+  return c.json({ items })
+})
+
+api.post('/grocery/items', async (c) => {
+  const user = c.get('user')
+  const ctx = await callerContext(c.env, user.id)
+  if (!ctx) return c.json({ error: 'no household' }, 404)
+  const body = await c.req.json<{ name?: string; category?: string; unit?: string }>()
+  if (!body.name?.trim()) return c.json({ error: 'name is required' }, 400)
+  const result = await createItem(getDb(c.env.DB), ctx.household.id, Date.now(), {
+    name: body.name,
+    category: body.category,
+    unit: body.unit,
+  })
+  return c.json(result, 201)
+})
+
+api.get('/grocery/list', async (c) => {
+  const user = c.get('user')
+  const ctx = await callerContext(c.env, user.id)
+  if (!ctx) return c.json({ error: 'no household' }, 404)
+  const entries = await listShopping(getDb(c.env.DB), ctx.household.id)
+  return c.json({ entries })
+})
+
+api.post('/grocery/list', async (c) => {
+  const user = c.get('user')
+  const ctx = await callerContext(c.env, user.id)
+  if (!ctx) return c.json({ error: 'no household' }, 404)
+  const body = await c.req.json<{
+    itemId?: string
+    name?: string
+    category?: string
+    unit?: string
+    quantity?: string
+    note?: string
+  }>()
+  const result = await addToList(getDb(c.env.DB), ctx.household.id, ctx.member.id, Date.now(), body)
+  if (result === 'invalid') return c.json({ error: 'itemId or name is required' }, 400)
+  return c.json(result, 201)
+})
+
+api.post('/grocery/entries/:id/purchase', async (c) => {
+  const user = c.get('user')
+  const ctx = await callerContext(c.env, user.id)
+  if (!ctx) return c.json({ error: 'no household' }, 404)
+  const body = await c.req.json<{ priceCents?: number; store?: string }>().catch(() => ({}))
+  const result = await purchaseEntry(
+    getDb(c.env.DB),
+    ctx.household.id,
+    ctx.member.id,
+    c.req.param('id'),
+    Date.now(),
+    body,
+  )
+  if (result === 'not-found') return c.json({ error: 'not found' }, 404)
+  return c.json({ ok: true })
+})
+
+api.post('/grocery/entries/:id/remove', async (c) => {
+  const user = c.get('user')
+  const ctx = await callerContext(c.env, user.id)
+  if (!ctx) return c.json({ error: 'no household' }, 404)
+  const result = await removeEntry(getDb(c.env.DB), ctx.household.id, c.req.param('id'))
   if (result === 'not-found') return c.json({ error: 'not found' }, 404)
   return c.json({ ok: true })
 })
