@@ -165,8 +165,9 @@ know exact inventory. Scoped in [docs/design/grocery.md](design/grocery.md).
 A separate module reusing the chores architecture. Lives behind an in-page
 **Chores ⇄ Shopping** tab; items tracked via a reusable per-household catalog.
 
-- **(4a) Shared shopping list** — `grocery_items` + `shopping_entries` tables, add/edit/
-  remove, mark purchased (date, optional price + store), member attribution. The Shopping tab.
+- **(4a) ✅ Shared shopping list** — `grocery_items` + `shopping_entries` tables, add/
+  remove, mark purchased, member attribution, the Shopping tab. (Price/store + category
+  grouping UI in 4c.) — PR #19
 - **(4b) Replenishment intelligence** — pure median-interval engine (`src/shared/grocery/`)
   + tests; "usually every ~N days → probably running low" restock hints, computed on view,
   one-tap add. This *is* the lightweight pantry estimate (a signal, not an inventory count).
