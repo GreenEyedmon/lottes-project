@@ -187,3 +187,54 @@ export function acceptSuggestion(id: string): Promise<{ ok: boolean }> {
 export function dismissSuggestion(id: string): Promise<{ ok: boolean }> {
   return request(`/api/suggestions/${id}/dismiss`, { method: 'POST' })
 }
+
+export interface GroceryItem {
+  id: string
+  name: string
+  category: string | null
+  defaultUnit: string | null
+}
+
+export interface ShoppingEntry {
+  id: string
+  itemId: string
+  name: string
+  category: string | null
+  quantity: string | null
+  note: string | null
+  addedBy: string
+  addedAt: number
+}
+
+export async function listGroceryItems(): Promise<GroceryItem[]> {
+  const data = await request<{ items: GroceryItem[] }>('/api/grocery/items')
+  return data.items
+}
+
+export async function listShopping(): Promise<ShoppingEntry[]> {
+  const data = await request<{ entries: ShoppingEntry[] }>('/api/grocery/list')
+  return data.entries
+}
+
+export function addToShoppingList(input: {
+  itemId?: string
+  name?: string
+  category?: string
+  quantity?: string
+}): Promise<{ id: string }> {
+  return request('/api/grocery/list', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function purchaseShoppingEntry(
+  id: string,
+  input: { priceCents?: number; store?: string } = {},
+): Promise<{ ok: boolean }> {
+  return request(`/api/grocery/entries/${id}/purchase`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+export function removeShoppingEntry(id: string): Promise<{ ok: boolean }> {
+  return request(`/api/grocery/entries/${id}/remove`, { method: 'POST' })
+}

@@ -5,7 +5,8 @@
  * one-way, in `mappers.ts`.
  */
 
-import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { sql } from 'drizzle-orm'
+import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import type { RecurrenceRule } from '../../shared/chore/types.ts'
 import type { SuggestionKind, SuggestionPatch } from '../../shared/suggest/types.ts'
 
@@ -202,4 +203,56 @@ export const suggestions = sqliteTable(
     dedupeKey: text('dedupe_key').unique(),
   },
   (t) => [index('suggestions_household_status_idx').on(t.householdId, t.status)],
+)
+
+// --- Grocery module (Phase 4) ---
+
+export const groceryItems = sqliteTable(
+  'grocery_items',
+  {
+    id: text('id').primaryKey(),
+    householdId: text('household_id')
+      .notNull()
+      .references(() => households.id),
+    name: text('name').notNull(),
+    // Normalized (lowercased, trimmed, collapsed whitespace) for dedupe.
+    nameKey: text('name_key').notNull(),
+    category: text('category'),
+    defaultUnit: text('default_unit'),
+    archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => [uniqueIndex('grocery_items_household_name_idx').on(t.householdId, t.nameKey)],
+)
+
+export const shoppingEntries = sqliteTable(
+  'shopping_entries',
+  {
+    id: text('id').primaryKey(),
+    householdId: text('household_id')
+      .notNull()
+      .references(() => households.id),
+    itemId: text('item_id')
+      .notNull()
+      .references(() => groceryItems.id),
+    // Free-text hint, never decremented — this is not inventory.
+    quantity: text('quantity'),
+    note: text('note'),
+    status: text('status', { enum: ['needed', 'purchased'] }).notNull(),
+    addedBy: text('added_by')
+      .notNull()
+      .references(() => members.id),
+    addedAt: integer('added_at').notNull(),
+    purchasedBy: text('purchased_by').references(() => members.id),
+    purchasedAt: integer('purchased_at'),
+    priceCents: integer('price_cents'),
+    store: text('store'),
+  },
+  (t) => [
+    index('shopping_household_status_idx').on(t.householdId, t.status),
+    // At most one open line per item; re-adding bumps the existing line instead.
+    uniqueIndex('shopping_open_line_idx')
+      .on(t.householdId, t.itemId)
+      .where(sql`${t.status} = 'needed'`),
+  ],
 )

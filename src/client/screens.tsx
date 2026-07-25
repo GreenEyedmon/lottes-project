@@ -7,6 +7,7 @@ import {
   acceptSuggestion,
   addCatalogChore,
   addRoom,
+  addToShoppingList,
   type CatalogChoreInput,
   claimOccurrence,
   completeOccurrence,
@@ -20,10 +21,13 @@ import {
   type HistoryWindow,
   type HouseholdView,
   listOccurrences,
+  listShopping,
   listSuggestions,
   type MissedPolicy,
   type OccurrenceView,
   postponeOccurrence,
+  purchaseShoppingEntry,
+  removeShoppingEntry,
   type SuggestionView,
   skipOccurrence,
   type TemporalStatus,
@@ -825,8 +829,106 @@ function HistorySection() {
   )
 }
 
+function ShoppingSection({ view }: { view: HouseholdView }) {
+  const queryClient = useQueryClient()
+  const [name, setName] = useState('')
+  const [quantity, setQuantity] = useState('')
+  const list = useQuery({ queryKey: ['shopping'], queryFn: listShopping })
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['shopping'] })
+  const add = useMutation({
+    mutationFn: () => addToShoppingList({ name, quantity: quantity.trim() || undefined }),
+    onSuccess: () => {
+      setName('')
+      setQuantity('')
+      invalidate()
+    },
+  })
+  const bought = useMutation({
+    mutationFn: (id: string) => purchaseShoppingEntry(id),
+    onSuccess: invalidate,
+  })
+  const remove = useMutation({ mutationFn: removeShoppingEntry, onSuccess: invalidate })
+
+  const memberName = (id: string): string =>
+    view.members.find((m) => m.id === id)?.displayName ?? 'Someone'
+
+  const entries = list.data ?? []
+
+  return (
+    <Card title="Shopping list">
+      {entries.length === 0 && <p className="text-base-content/50 text-sm">Nothing on the list.</p>}
+      {entries.length > 0 && (
+        <ul className="flex flex-col divide-y divide-base-200">
+          {entries.map((entry) => (
+            <li key={entry.id} className="flex items-center justify-between gap-2 py-2">
+              <div className="flex flex-col">
+                <span className="font-medium">
+                  {entry.name}
+                  {entry.quantity && (
+                    <span className="text-base-content/60"> · {entry.quantity}</span>
+                  )}
+                </span>
+                <span className="text-base-content/50 text-xs">
+                  {entry.category ? `${entry.category} · ` : ''}
+                  added by {memberName(entry.addedBy)}
+                </span>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => bought.mutate(entry.id)}
+                  className="btn btn-primary btn-sm"
+                >
+                  Bought
+                </button>
+                <button
+                  type="button"
+                  onClick={() => remove.mutate(entry.id)}
+                  aria-label={`Remove ${entry.name}`}
+                  className="btn btn-square btn-ghost btn-sm"
+                >
+                  ✕
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          add.mutate()
+        }}
+        className="flex flex-col gap-2 sm:flex-row"
+      >
+        <input
+          required
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Add item (e.g. Milk)"
+          aria-label="Item name"
+          className="input input-bordered input-sm flex-1"
+        />
+        <input
+          value={quantity}
+          onChange={(e) => setQuantity(e.target.value)}
+          placeholder="Qty (optional)"
+          aria-label="Quantity"
+          className="input input-bordered input-sm sm:w-28"
+        />
+        <button type="submit" className="btn btn-neutral btn-sm">
+          Add
+        </button>
+      </form>
+    </Card>
+  )
+}
+
 function HouseholdHome({ view }: { view: HouseholdView }) {
   const queryClient = useQueryClient()
+  const [tab, setTab] = useState<'chores' | 'shopping'>('chores')
   const [roomName, setRoomName] = useState('')
   const [inviteLink, setInviteLink] = useState<string | null>(null)
 
@@ -858,9 +960,33 @@ function HouseholdHome({ view }: { view: HouseholdView }) {
           </button>
         </header>
 
-        <ChoresSection view={view} />
+        <div role="tablist" className="tabs tabs-box">
+          <button
+            type="button"
+            role="tab"
+            onClick={() => setTab('chores')}
+            className={`tab flex-1 ${tab === 'chores' ? 'tab-active' : ''}`}
+          >
+            Chores
+          </button>
+          <button
+            type="button"
+            role="tab"
+            onClick={() => setTab('shopping')}
+            className={`tab flex-1 ${tab === 'shopping' ? 'tab-active' : ''}`}
+          >
+            Shopping
+          </button>
+        </div>
 
-        <HistorySection />
+        {tab === 'chores' ? (
+          <>
+            <ChoresSection view={view} />
+            <HistorySection />
+          </>
+        ) : (
+          <ShoppingSection view={view} />
+        )}
 
         <Card title="Members">
           <ul className="flex flex-col gap-1">
