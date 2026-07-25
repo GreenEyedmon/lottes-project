@@ -160,12 +160,19 @@ queries (well under the D1 50-query cap); no external ML — deterministic and l
 ### Phase 4 — Grocery tracking  *(spec §14 Phase 4 — separate module)*
 
 **Goal:** A shared shopping list that gradually gets smarter, without pretending to
-know exact inventory.
+know exact inventory. Scoped in [docs/design/grocery.md](design/grocery.md).
 
-- Shared shopping list: add item, category, quantity, mark purchased, purchase date,
-  optional price + store.
-- Purchase history → **replenishment suggestions** using **median** intervals.
-- **Lightweight pantry estimates** ("probably running low", not "200 ml remaining").
+A separate module reusing the chores architecture. Lives behind an in-page
+**Chores ⇄ Shopping** tab; items tracked via a reusable per-household catalog.
+
+- **(4a) Shared shopping list** — `grocery_items` + `shopping_entries` tables, add/edit/
+  remove, mark purchased (date, optional price + store), member attribution. The Shopping tab.
+- **(4b) Replenishment intelligence** — pure median-interval engine (`src/shared/grocery/`)
+  + tests; "usually every ~N days → probably running low" restock hints, computed on view,
+  one-tap add. This *is* the lightweight pantry estimate (a signal, not an inventory count).
+- **(4c) List ergonomics** — category grouping, quantity + units, recent-items quick-add.
+
+Deferred (per the spec): detailed pantry inventory, receipt scanning, price analytics.
 
 **Exit:** shared list + basic replenishment intelligence.
 
