@@ -26,6 +26,7 @@ import { households, invites, members, pushSubscriptions, rooms } from './db/sch
 import {
   addToList,
   createItem,
+  getRestockSuggestions,
   listCatalog,
   listShopping,
   purchaseEntry,
@@ -513,8 +514,12 @@ api.get('/grocery/list', async (c) => {
   const user = c.get('user')
   const ctx = await callerContext(c.env, user.id)
   if (!ctx) return c.json({ error: 'no household' }, 404)
-  const entries = await listShopping(getDb(c.env.DB), ctx.household.id)
-  return c.json({ entries })
+  const db = getDb(c.env.DB)
+  const [entries, restock] = await Promise.all([
+    listShopping(db, ctx.household.id),
+    getRestockSuggestions(db, ctx.household.id, ctx.household.ianaTimeZone, Date.now()),
+  ])
+  return c.json({ entries, restock })
 })
 
 api.post('/grocery/list', async (c) => {

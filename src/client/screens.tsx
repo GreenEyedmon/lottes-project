@@ -18,10 +18,10 @@ import {
   dismissSuggestion,
   getCurrentHousehold,
   getHistory,
+  getShopping,
   type HistoryWindow,
   type HouseholdView,
   listOccurrences,
-  listShopping,
   listSuggestions,
   type MissedPolicy,
   type OccurrenceView,
@@ -833,7 +833,7 @@ function ShoppingSection({ view }: { view: HouseholdView }) {
   const queryClient = useQueryClient()
   const [name, setName] = useState('')
   const [quantity, setQuantity] = useState('')
-  const list = useQuery({ queryKey: ['shopping'], queryFn: listShopping })
+  const list = useQuery({ queryKey: ['shopping'], queryFn: getShopping })
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['shopping'] })
   const add = useMutation({
@@ -844,6 +844,10 @@ function ShoppingSection({ view }: { view: HouseholdView }) {
       invalidate()
     },
   })
+  const addItem = useMutation({
+    mutationFn: (itemId: string) => addToShoppingList({ itemId }),
+    onSuccess: invalidate,
+  })
   const bought = useMutation({
     mutationFn: (id: string) => purchaseShoppingEntry(id),
     onSuccess: invalidate,
@@ -853,10 +857,33 @@ function ShoppingSection({ view }: { view: HouseholdView }) {
   const memberName = (id: string): string =>
     view.members.find((m) => m.id === id)?.displayName ?? 'Someone'
 
-  const entries = list.data ?? []
+  const entries = list.data?.entries ?? []
+  const restock = list.data?.restock ?? []
 
   return (
     <Card title="Shopping list">
+      {restock.length > 0 && (
+        <div className="flex flex-col gap-1 rounded-box bg-base-200 p-2">
+          <p className="font-semibold text-base-content/60 text-xs uppercase tracking-wide">
+            Probably running low
+          </p>
+          {restock.map((item) => (
+            <div key={item.itemId} className="flex items-center justify-between gap-2">
+              <span className="flex flex-col">
+                <span className="font-medium text-sm">{item.name}</span>
+                <span className="text-base-content/50 text-xs">💡 {item.explanation}</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => addItem.mutate(item.itemId)}
+                className="btn btn-primary btn-xs"
+              >
+                Add
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
       {entries.length === 0 && <p className="text-base-content/50 text-sm">Nothing on the list.</p>}
       {entries.length > 0 && (
         <ul className="flex flex-col divide-y divide-base-200">

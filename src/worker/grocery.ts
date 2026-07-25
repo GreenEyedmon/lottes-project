@@ -6,6 +6,7 @@
  */
 
 import { and, eq } from 'drizzle-orm'
+import { analyzeReplenishment } from '../shared/grocery/replenish.ts'
 import type { Db } from './db/index.ts'
 import { groceryItems, shoppingEntries } from './db/schema.ts'
 
@@ -207,6 +208,70 @@ export async function purchaseEntry(
     })
     .where(and(eq(shoppingEntries.id, entryId), eq(shoppingEntries.status, 'needed')))
   return 'ok'
+}
+
+export interface RestockSuggestion {
+  itemId: string
+  name: string
+  category: string | null
+  explanation: string
+  evidence: Record<string, number>
+}
+
+/**
+ * Restock hints, computed on demand: for each catalog item *not* already on the list, run
+ * the pure replenishment analyzer over its purchase history. Three reads, all household-
+ * scoped — fine at grocery scale.
+ */
+export async function getRestockSuggestions(
+  db: Db,
+  householdId: string,
+  timeZone: string,
+  now: number,
+): Promise<RestockSuggestion[]> {
+  const purchases = await db
+    .select({ itemId: shoppingEntries.itemId, purchasedAt: shoppingEntries.purchasedAt })
+    .from(shoppingEntries)
+    .where(
+      and(eq(shoppingEntries.householdId, householdId), eq(shoppingEntries.status, 'purchased')),
+    )
+  const historyByItem = new Map<string, number[]>()
+  for (const p of purchases) {
+    if (p.purchasedAt == null) continue
+    const list = historyByItem.get(p.itemId) ?? []
+    list.push(p.purchasedAt)
+    historyByItem.set(p.itemId, list)
+  }
+
+  const openRows = await db
+    .select({ itemId: shoppingEntries.itemId })
+    .from(shoppingEntries)
+    .where(and(eq(shoppingEntries.householdId, householdId), eq(shoppingEntries.status, 'needed')))
+  const onList = new Set(openRows.map((r) => r.itemId))
+
+  const items = await db
+    .select()
+    .from(groceryItems)
+    .where(and(eq(groceryItems.householdId, householdId), eq(groceryItems.archived, false)))
+
+  const result: RestockSuggestion[] = []
+  for (const item of items) {
+    if (onList.has(item.id)) continue
+    const history = historyByItem.get(item.id)
+    if (!history) continue
+    const suggestion = analyzeReplenishment({ now, timeZone, purchases: history })
+    if (!suggestion) continue
+    result.push({
+      itemId: item.id,
+      name: item.name,
+      category: item.category,
+      explanation: suggestion.explanation,
+      evidence: suggestion.evidence,
+    })
+  }
+  // Most overdue first.
+  result.sort((a, b) => (b.evidence.daysSince ?? 0) - (a.evidence.daysSince ?? 0))
+  return result
 }
 
 /** Remove an open line. Purchased entries are history and are never deleted here. */
