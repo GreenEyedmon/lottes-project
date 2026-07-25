@@ -211,9 +211,21 @@ export async function listGroceryItems(): Promise<GroceryItem[]> {
   return data.items
 }
 
-export async function listShopping(): Promise<ShoppingEntry[]> {
-  const data = await request<{ entries: ShoppingEntry[] }>('/api/grocery/list')
-  return data.entries
+export interface RestockSuggestion {
+  itemId: string
+  name: string
+  category: string | null
+  explanation: string
+  evidence: Record<string, number>
+}
+
+export interface ShoppingView {
+  entries: ShoppingEntry[]
+  restock: RestockSuggestion[]
+}
+
+export function getShopping(): Promise<ShoppingView> {
+  return request<ShoppingView>('/api/grocery/list')
 }
 
 export function addToShoppingList(input: {
