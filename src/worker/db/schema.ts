@@ -256,3 +256,45 @@ export const shoppingEntries = sqliteTable(
       .where(sql`${t.status} = 'needed'`),
   ],
 )
+
+// --- Meal planning (Phase 5) ---
+
+export const recipes = sqliteTable(
+  'recipes',
+  {
+    id: text('id').primaryKey(),
+    householdId: text('household_id')
+      .notNull()
+      .references(() => households.id),
+    name: text('name').notNull(),
+    nameKey: text('name_key').notNull(),
+    dietaryTags: text('dietary_tags', { mode: 'json' }).$type<string[]>().notNull(),
+    cookMinutes: integer('cook_minutes'),
+    servings: integer('servings'),
+    createdBy: text('created_by')
+      .notNull()
+      .references(() => members.id),
+    archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => [uniqueIndex('recipes_household_name_idx').on(t.householdId, t.nameKey)],
+)
+
+export const recipeIngredients = sqliteTable(
+  'recipe_ingredients',
+  {
+    id: text('id').primaryKey(),
+    recipeId: text('recipe_id')
+      .notNull()
+      .references(() => recipes.id),
+    // Shares the grocery catalog, so a recipe's ingredients speak the same item vocabulary
+    // as the shopping list.
+    itemId: text('item_id')
+      .notNull()
+      .references(() => groceryItems.id),
+    quantity: text('quantity'),
+    // Pantry basics (salt, oil) — never auto-added to the list when cooking.
+    staple: integer('staple', { mode: 'boolean' }).notNull().default(false),
+  },
+  (t) => [index('recipe_ingredients_recipe_idx').on(t.recipeId)],
+)

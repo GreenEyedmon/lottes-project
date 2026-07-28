@@ -250,3 +250,40 @@ export function purchaseShoppingEntry(
 export function removeShoppingEntry(id: string): Promise<{ ok: boolean }> {
   return request(`/api/grocery/entries/${id}/remove`, { method: 'POST' })
 }
+
+export interface RecipeIngredient {
+  itemId: string
+  name: string
+  quantity: string | null
+  staple: boolean
+}
+
+export interface Recipe {
+  id: string
+  name: string
+  dietaryTags: string[]
+  cookMinutes: number | null
+  servings: number | null
+  ingredients: RecipeIngredient[]
+}
+
+export async function listRecipes(): Promise<Recipe[]> {
+  const data = await request<{ recipes: Recipe[] }>('/api/meals/recipes')
+  return data.recipes
+}
+
+export interface NewRecipeInput {
+  name: string
+  dietaryTags?: string[]
+  cookMinutes?: number
+  servings?: number
+  ingredients: { name: string; quantity?: string; staple?: boolean }[]
+}
+
+export function createRecipe(input: NewRecipeInput): Promise<{ id: string }> {
+  return request('/api/meals/recipes', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function deleteRecipe(id: string): Promise<{ ok: boolean }> {
+  return request(`/api/meals/recipes/${id}/delete`, { method: 'POST' })
+}

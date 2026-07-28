@@ -34,6 +34,7 @@ import {
 } from './grocery.ts'
 import { getHistory } from './history.ts'
 import { isInviteUsable, newInviteCode } from './invites.ts'
+import { createRecipe, deleteRecipe, listRecipes, type NewRecipe } from './meals.ts'
 import { pushConfigured, sendPush } from './push.ts'
 import { announceActivity } from './reminders.ts'
 import { acceptSuggestion, dismissSuggestion, listPendingSuggestions } from './suggestions.ts'
@@ -561,6 +562,45 @@ api.post('/grocery/entries/:id/remove', async (c) => {
   const ctx = await callerContext(c.env, user.id)
   if (!ctx) return c.json({ error: 'no household' }, 404)
   const result = await removeEntry(getDb(c.env.DB), ctx.household.id, c.req.param('id'))
+  if (result === 'not-found') return c.json({ error: 'not found' }, 404)
+  return c.json({ ok: true })
+})
+
+// --- Meal planning / recipes (Phase 5a) ---
+
+api.get('/meals/recipes', async (c) => {
+  const user = c.get('user')
+  const ctx = await callerContext(c.env, user.id)
+  if (!ctx) return c.json({ error: 'no household' }, 404)
+  const recipes = await listRecipes(getDb(c.env.DB), ctx.household.id)
+  return c.json({ recipes })
+})
+
+api.post('/meals/recipes', async (c) => {
+  const user = c.get('user')
+  const ctx = await callerContext(c.env, user.id)
+  if (!ctx) return c.json({ error: 'no household' }, 404)
+  const body = await c.req.json<Partial<NewRecipe>>()
+  if (!body.name?.trim() || !Array.isArray(body.ingredients)) {
+    return c.json({ error: 'name and ingredients are required' }, 400)
+  }
+  const result = await createRecipe(getDb(c.env.DB), ctx.household.id, ctx.member.id, Date.now(), {
+    name: body.name,
+    dietaryTags: body.dietaryTags,
+    cookMinutes: body.cookMinutes,
+    servings: body.servings,
+    ingredients: body.ingredients,
+  })
+  if (result === 'invalid') return c.json({ error: 'a name and at least one ingredient' }, 400)
+  if (result === 'exists') return c.json({ error: 'a recipe with that name already exists' }, 409)
+  return c.json(result, 201)
+})
+
+api.post('/meals/recipes/:id/delete', async (c) => {
+  const user = c.get('user')
+  const ctx = await callerContext(c.env, user.id)
+  if (!ctx) return c.json({ error: 'no household' }, 404)
+  const result = await deleteRecipe(getDb(c.env.DB), ctx.household.id, c.req.param('id'))
   if (result === 'not-found') return c.json({ error: 'not found' }, 404)
   return c.json({ ok: true })
 })
