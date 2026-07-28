@@ -195,7 +195,7 @@ recipes, but naming a dish surfaces suggested ingredients from a curated diction
   list AND not recently bought AND not a staple) + a deterministic recommender (cook time /
   dietary filters, rank by fewest missing → least-recently cooked → shortest cook time);
   **Cook this** adds the missing ingredients and logs the meal (`meal_logs`). — PR #23
-- **(5c)** *(optional)* meal history, "cook again," recipe editing.
+- **(5c) ✅** meal history ("recently cooked" + "cook again") and recipe editing. — PR #24
 
 Deferred (per the spec): AI meal generation, real inventory/leftovers, budget ranking,
 nutrition, quantity scaling.
