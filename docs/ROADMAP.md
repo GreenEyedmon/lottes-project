@@ -191,16 +191,16 @@ recipes, but naming a dish surfaces suggested ingredients from a curated diction
 - **(5a) ✅ Recipe collection + ingredient suggestions** — `recipes` + `recipe_ingredients`
   (ref `grocery_items`, `staple` flag); pure dish→ingredients dictionary; the Meals tab
   (author by name → suggested ingredients → edit → save). (`meal_logs` lands in 5b.) — PR #22
-- **(5b) Suggestions, cook, add-to-list** — pure "missing ingredients" heuristic (not on
+- **(5b) ✅ Suggestions, cook, add-to-list** — pure "missing ingredients" heuristic (not on
   list AND not recently bought AND not a staple) + a deterministic recommender (cook time /
-  dietary filters, avoid recently cooked, rank by fewest missing); **Cook this** adds the
-  missing ingredients and logs the meal. *Exit condition.*
+  dietary filters, rank by fewest missing → least-recently cooked → shortest cook time);
+  **Cook this** adds the missing ingredients and logs the meal (`meal_logs`). — PR #23
 - **(5c)** *(optional)* meal history, "cook again," recipe editing.
 
 Deferred (per the spec): AI meal generation, real inventory/leftovers, budget ranking,
 nutrition, quantity scaling.
 
-**Exit:** pick a meal, get the missing ingredients on the list.
+**Exit:** ✅ pick a meal, get the missing ingredients on the list.
 
 ---
 
