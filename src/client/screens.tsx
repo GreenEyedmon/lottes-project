@@ -30,15 +30,18 @@ import {
   listOccurrences,
   listSuggestions,
   type MissedPolicy,
+  mealHistory,
   type OccurrenceView,
   postponeOccurrence,
   purchaseShoppingEntry,
   removeShoppingEntry,
   type ShoppingEntry,
+  type SuggestedMeal,
   type SuggestionView,
   skipOccurrence,
   suggestMeals,
   type TemporalStatus,
+  updateRecipe,
   updateSettings,
 } from './api.ts'
 import { authClient } from './auth-client.ts'
@@ -1111,13 +1114,14 @@ const makeIngredientRow = (): IngredientDraft => ({
 
 const DIETARY_TAGS = ['vegetarian', 'vegan', 'gluten-free']
 
-function MealsSection() {
+function MealsSection({ view }: { view: HouseholdView }) {
   const queryClient = useQueryClient()
   const [name, setName] = useState('')
   const [ingredients, setIngredients] = useState<IngredientDraft[]>(() => [makeIngredientRow()])
   const [cookMinutes, setCookMinutes] = useState('')
   const [servings, setServings] = useState('')
   const [tags, setTags] = useState<Set<string>>(new Set())
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [filterCook, setFilterCook] = useState('')
   const [filterTags, setFilterTags] = useState<Set<string>>(new Set())
   const [cookedMsg, setCookedMsg] = useState<string | null>(null)
@@ -1131,11 +1135,24 @@ function MealsSection() {
         requiredTags: [...filterTags],
       }),
   })
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['meals'] })
+  const historyQuery = useQuery({ queryKey: ['meal-history'], queryFn: mealHistory })
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ['meals'] })
+    queryClient.invalidateQueries({ queryKey: ['meal-history'] })
+  }
+
+  const resetForm = () => {
+    setEditingId(null)
+    setName('')
+    setIngredients([makeIngredientRow()])
+    setCookMinutes('')
+    setServings('')
+    setTags(new Set())
+  }
 
   const save = useMutation({
-    mutationFn: () =>
-      createRecipe({
+    mutationFn: async () => {
+      const payload = {
         name,
         dietaryTags: [...tags],
         cookMinutes: cookMinutes.trim() ? Number(cookMinutes) : undefined,
@@ -1147,16 +1164,32 @@ function MealsSection() {
             quantity: row.quantity.trim() || undefined,
             staple: row.staple,
           })),
-      }),
+      }
+      if (editingId) await updateRecipe(editingId, payload)
+      else await createRecipe(payload)
+    },
     onSuccess: () => {
-      setName('')
-      setIngredients([makeIngredientRow()])
-      setCookMinutes('')
-      setServings('')
-      setTags(new Set())
+      resetForm()
       invalidate()
     },
   })
+  const startEdit = (recipe: SuggestedMeal) => {
+    setEditingId(recipe.id)
+    setName(recipe.name)
+    setIngredients(
+      recipe.ingredients.length > 0
+        ? recipe.ingredients.map((i) => ({
+            id: crypto.randomUUID(),
+            name: i.name,
+            quantity: i.quantity ?? '',
+            staple: i.staple,
+          }))
+        : [makeIngredientRow()],
+    )
+    setCookMinutes(recipe.cookMinutes != null ? String(recipe.cookMinutes) : '')
+    setServings(recipe.servings != null ? String(recipe.servings) : '')
+    setTags(new Set(recipe.dietaryTags))
+  }
   const remove = useMutation({ mutationFn: deleteRecipe, onSuccess: invalidate })
   const cook = useMutation({
     mutationFn: cookRecipe,
@@ -1204,7 +1237,11 @@ function MealsSection() {
       return next
     })
 
+  const memberName = (id: string): string =>
+    view.members.find((m) => m.id === id)?.displayName ?? 'Someone'
+
   const recipes = recipesQuery.data ?? []
+  const history = historyQuery.data ?? []
 
   return (
     <Card title="Meals">
@@ -1291,6 +1328,14 @@ function MealsSection() {
                 </button>
                 <button
                   type="button"
+                  onClick={() => startEdit(recipe)}
+                  aria-label={`Edit ${recipe.name}`}
+                  className="btn btn-ghost btn-sm"
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
                   onClick={() => remove.mutate(recipe.id)}
                   aria-label={`Delete ${recipe.name}`}
                   className="btn btn-square btn-ghost btn-sm"
@@ -1310,6 +1355,16 @@ function MealsSection() {
         }}
         className="flex flex-col gap-2"
       >
+        {editingId && (
+          <div className="flex items-center justify-between">
+            <span className="font-semibold text-base-content/60 text-xs uppercase tracking-wide">
+              Editing recipe
+            </span>
+            <button type="button" onClick={resetForm} className="btn btn-ghost btn-xs">
+              Cancel
+            </button>
+          </div>
+        )}
         <input
           required
           value={name}
@@ -1400,10 +1455,37 @@ function MealsSection() {
           ))}
         </div>
         <button type="submit" className="btn btn-neutral btn-sm w-fit">
-          Save recipe
+          {editingId ? 'Save changes' : 'Save recipe'}
         </button>
         {save.error && <p className="text-error text-xs">{errorMessage(save.error)}</p>}
       </form>
+
+      {history.length > 0 && (
+        <div className="flex flex-col gap-1">
+          <p className="font-semibold text-base-content/50 text-xs uppercase tracking-wide">
+            Recently cooked
+          </p>
+          <ul className="flex flex-col divide-y divide-base-200">
+            {history.map((entry) => (
+              <li key={entry.id} className="flex items-center justify-between gap-2 py-1.5">
+                <span className="flex flex-col">
+                  <span className="text-sm">{entry.recipeName}</span>
+                  <span className="text-base-content/50 text-xs">
+                    {memberName(entry.cookedBy)} · {timeAgo(entry.cookedAt)}
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => cook.mutate(entry.recipeId)}
+                  className="btn btn-ghost btn-xs"
+                >
+                  Cook again
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </Card>
   )
 }
@@ -1476,7 +1558,7 @@ function HouseholdHome({ view }: { view: HouseholdView }) {
           </>
         )}
         {tab === 'shopping' && <ShoppingSection view={view} />}
-        {tab === 'meals' && <MealsSection />}
+        {tab === 'meals' && <MealsSection view={view} />}
 
         <Card title="Members">
           <ul className="flex flex-col gap-1">

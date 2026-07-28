@@ -5,7 +5,7 @@
  * add them to the list. Deletes are soft (`archived`) so meal history stays valid.
  */
 
-import { and, eq, gte } from 'drizzle-orm'
+import { and, desc, eq, gte } from 'drizzle-orm'
 import { computeMissing } from '../shared/meal/missing.ts'
 import { type RecipeCandidate, recommendMeals } from '../shared/meal/recommend.ts'
 import type { Db } from './db/index.ts'
@@ -153,6 +153,92 @@ export async function deleteRecipe(
   if (!row || row.householdId !== householdId || row.archived) return 'not-found'
   await db.update(recipes).set({ archived: true }).where(eq(recipes.id, recipeId))
   return 'ok'
+}
+
+/** Replace a recipe's fields and ingredients wholesale. */
+export async function updateRecipe(
+  db: Db,
+  householdId: string,
+  recipeId: string,
+  now: number,
+  input: NewRecipe,
+): Promise<'ok' | 'not-found' | 'invalid' | 'exists'> {
+  if (!input.name?.trim()) return 'invalid'
+  const named = input.ingredients.filter((i) => i.name?.trim())
+  if (named.length === 0) return 'invalid'
+
+  const [recipe] = await db.select().from(recipes).where(eq(recipes.id, recipeId)).limit(1)
+  if (!recipe || recipe.householdId !== householdId || recipe.archived) return 'not-found'
+
+  const nameKey = normalizeNameKey(input.name)
+  if (nameKey !== recipe.nameKey) {
+    const [clash] = await db
+      .select({ id: recipes.id })
+      .from(recipes)
+      .where(
+        and(
+          eq(recipes.householdId, householdId),
+          eq(recipes.nameKey, nameKey),
+          eq(recipes.archived, false),
+        ),
+      )
+      .limit(1)
+    if (clash && clash.id !== recipeId) return 'exists'
+  }
+
+  const ingredientRows: (typeof recipeIngredients.$inferInsert)[] = []
+  for (const ingredient of named) {
+    const { id: itemId } = await createItem(db, householdId, now, { name: ingredient.name })
+    ingredientRows.push({
+      id: crypto.randomUUID(),
+      recipeId,
+      itemId,
+      quantity: ingredient.quantity?.trim() || null,
+      staple: ingredient.staple ?? false,
+    })
+  }
+
+  await db
+    .update(recipes)
+    .set({
+      name: input.name.trim(),
+      nameKey,
+      dietaryTags: input.dietaryTags ?? [],
+      cookMinutes: input.cookMinutes ?? null,
+      servings: input.servings ?? null,
+    })
+    .where(eq(recipes.id, recipeId))
+  await db.delete(recipeIngredients).where(eq(recipeIngredients.recipeId, recipeId))
+  for (const row of ingredientRows) await db.insert(recipeIngredients).values(row)
+  return 'ok'
+}
+
+export interface MealHistoryEntry {
+  id: string
+  recipeId: string
+  recipeName: string
+  cookedBy: string
+  cookedAt: number
+}
+
+export async function listMealHistory(
+  db: Db,
+  householdId: string,
+  limit = 10,
+): Promise<MealHistoryEntry[]> {
+  return db
+    .select({
+      id: mealLogs.id,
+      recipeId: mealLogs.recipeId,
+      recipeName: recipes.name,
+      cookedBy: mealLogs.cookedBy,
+      cookedAt: mealLogs.cookedAt,
+    })
+    .from(mealLogs)
+    .innerJoin(recipes, eq(mealLogs.recipeId, recipes.id))
+    .where(eq(mealLogs.householdId, householdId))
+    .orderBy(desc(mealLogs.cookedAt))
+    .limit(limit)
 }
 
 async function onListItemIds(db: Db, householdId: string): Promise<Set<string>> {

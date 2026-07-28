@@ -309,3 +309,23 @@ export async function suggestMeals(prefs: MealPrefs = {}): Promise<SuggestedMeal
 export function cookRecipe(id: string): Promise<{ added: number }> {
   return request(`/api/meals/recipes/${id}/cook`, { method: 'POST' })
 }
+
+export function updateRecipe(id: string, input: NewRecipeInput): Promise<{ ok: boolean }> {
+  return request(`/api/meals/recipes/${id}/update`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+export interface MealHistoryEntry {
+  id: string
+  recipeId: string
+  recipeName: string
+  cookedBy: string
+  cookedAt: number
+}
+
+export async function mealHistory(): Promise<MealHistoryEntry[]> {
+  const data = await request<{ history: MealHistoryEntry[] }>('/api/meals/history')
+  return data.history
+}
