@@ -287,3 +287,25 @@ export function createRecipe(input: NewRecipeInput): Promise<{ id: string }> {
 export function deleteRecipe(id: string): Promise<{ ok: boolean }> {
   return request(`/api/meals/recipes/${id}/delete`, { method: 'POST' })
 }
+
+export interface SuggestedMeal extends Recipe {
+  missingCount: number
+}
+
+export interface MealPrefs {
+  maxCookMinutes?: number
+  requiredTags?: string[]
+}
+
+export async function suggestMeals(prefs: MealPrefs = {}): Promise<SuggestedMeal[]> {
+  const params = new URLSearchParams()
+  if (prefs.maxCookMinutes != null) params.set('maxCookMinutes', String(prefs.maxCookMinutes))
+  if (prefs.requiredTags?.length) params.set('tags', prefs.requiredTags.join(','))
+  const qs = params.toString()
+  const data = await request<{ meals: SuggestedMeal[] }>(`/api/meals/suggest${qs ? `?${qs}` : ''}`)
+  return data.meals
+}
+
+export function cookRecipe(id: string): Promise<{ added: number }> {
+  return request(`/api/meals/recipes/${id}/cook`, { method: 'POST' })
+}

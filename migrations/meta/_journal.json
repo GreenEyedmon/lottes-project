@@ -64,6 +64,13 @@
       "when": 1785280631428,
       "tag": "0008_silky_rawhide_kid",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1785281432128,
+      "tag": "0009_fearless_terrax",
+      "breakpoints": true
     }
   ]
 }

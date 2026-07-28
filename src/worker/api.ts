@@ -34,7 +34,14 @@ import {
 } from './grocery.ts'
 import { getHistory } from './history.ts'
 import { isInviteUsable, newInviteCode } from './invites.ts'
-import { createRecipe, deleteRecipe, listRecipes, type NewRecipe } from './meals.ts'
+import {
+  cookRecipe,
+  createRecipe,
+  deleteRecipe,
+  listRecipes,
+  type NewRecipe,
+  suggestMeals,
+} from './meals.ts'
 import { pushConfigured, sendPush } from './push.ts'
 import { announceActivity } from './reminders.ts'
 import { acceptSuggestion, dismissSuggestion, listPendingSuggestions } from './suggestions.ts'
@@ -603,4 +610,34 @@ api.post('/meals/recipes/:id/delete', async (c) => {
   const result = await deleteRecipe(getDb(c.env.DB), ctx.household.id, c.req.param('id'))
   if (result === 'not-found') return c.json({ error: 'not found' }, 404)
   return c.json({ ok: true })
+})
+
+api.get('/meals/suggest', async (c) => {
+  const user = c.get('user')
+  const ctx = await callerContext(c.env, user.id)
+  if (!ctx) return c.json({ error: 'no household' }, 404)
+  const maxRaw = c.req.query('maxCookMinutes')
+  const maxCookMinutes = maxRaw && Number.isFinite(Number(maxRaw)) ? Number(maxRaw) : undefined
+  const tagsRaw = c.req.query('tags')
+  const requiredTags = tagsRaw ? tagsRaw.split(',').filter(Boolean) : undefined
+  const meals = await suggestMeals(getDb(c.env.DB), ctx.household.id, Date.now(), {
+    maxCookMinutes,
+    requiredTags,
+  })
+  return c.json({ meals })
+})
+
+api.post('/meals/recipes/:id/cook', async (c) => {
+  const user = c.get('user')
+  const ctx = await callerContext(c.env, user.id)
+  if (!ctx) return c.json({ error: 'no household' }, 404)
+  const result = await cookRecipe(
+    getDb(c.env.DB),
+    ctx.household.id,
+    ctx.member.id,
+    Date.now(),
+    c.req.param('id'),
+  )
+  if (result === 'not-found') return c.json({ error: 'not found' }, 404)
+  return c.json(result)
 })
