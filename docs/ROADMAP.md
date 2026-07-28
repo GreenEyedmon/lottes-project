@@ -188,9 +188,9 @@ Builds on grocery: recipe ingredients reference `grocery_items`. Household-autho
 recipes, but naming a dish surfaces suggested ingredients from a curated dictionary
 (no AI). Third top-level **Meals** tab.
 
-- **(5a) Recipe collection + ingredient suggestions** — `recipes` + `recipe_ingredients`
-  (ref `grocery_items`, with a `staple` flag) + `meal_logs`; pure dish→ingredients
-  dictionary; the Meals tab (author by name → suggested ingredients → edit → save).
+- **(5a) ✅ Recipe collection + ingredient suggestions** — `recipes` + `recipe_ingredients`
+  (ref `grocery_items`, `staple` flag); pure dish→ingredients dictionary; the Meals tab
+  (author by name → suggested ingredients → edit → save). (`meal_logs` lands in 5b.) — PR #22
 - **(5b) Suggestions, cook, add-to-list** — pure "missing ingredients" heuristic (not on
   list AND not recently bought AND not a staple) + a deterministic recommender (cook time /
   dietary filters, avoid recently cooked, rank by fewest missing); **Cook this** adds the
