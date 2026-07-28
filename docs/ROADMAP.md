@@ -182,11 +182,23 @@ Deferred (per the spec): detailed pantry inventory, receipt scanning, price anal
 
 ### Phase 5 — Meal planning  *(spec §14 Phase 5)*
 
-**Goal:** Close the meal → grocery loop.
+**Goal:** Close the meal → grocery loop. Scoped in [docs/design/meals.md](design/meals.md).
 
-- Meal suggestions from preferences (people, cooking time, dietary needs, on-hand
-  ingredients, budget, leftovers, recent meals).
-- Selecting a suggested meal auto-adds the missing ingredients to the shopping list.
+Builds on grocery: recipe ingredients reference `grocery_items`. Household-authored
+recipes, but naming a dish surfaces suggested ingredients from a curated dictionary
+(no AI). Third top-level **Meals** tab.
+
+- **(5a) Recipe collection + ingredient suggestions** — `recipes` + `recipe_ingredients`
+  (ref `grocery_items`, with a `staple` flag) + `meal_logs`; pure dish→ingredients
+  dictionary; the Meals tab (author by name → suggested ingredients → edit → save).
+- **(5b) Suggestions, cook, add-to-list** — pure "missing ingredients" heuristic (not on
+  list AND not recently bought AND not a staple) + a deterministic recommender (cook time /
+  dietary filters, avoid recently cooked, rank by fewest missing); **Cook this** adds the
+  missing ingredients and logs the meal. *Exit condition.*
+- **(5c)** *(optional)* meal history, "cook again," recipe editing.
+
+Deferred (per the spec): AI meal generation, real inventory/leftovers, budget ranking,
+nutrition, quantity scaling.
 
 **Exit:** pick a meal, get the missing ingredients on the list.
 
