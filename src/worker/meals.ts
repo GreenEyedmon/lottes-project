@@ -5,10 +5,15 @@
  * add them to the list. Deletes are soft (`archived`) so meal history stays valid.
  */
 
-import { and, eq } from 'drizzle-orm'
+import { and, eq, gte } from 'drizzle-orm'
+import { computeMissing } from '../shared/meal/missing.ts'
+import { type RecipeCandidate, recommendMeals } from '../shared/meal/recommend.ts'
 import type { Db } from './db/index.ts'
-import { groceryItems, recipeIngredients, recipes } from './db/schema.ts'
-import { createItem, normalizeNameKey } from './grocery.ts'
+import { groceryItems, mealLogs, recipeIngredients, recipes, shoppingEntries } from './db/schema.ts'
+import { addToList, createItem, normalizeNameKey } from './grocery.ts'
+
+/** Recent-purchase window: an item bought within this many days is assumed still on hand. */
+const RECENT_PURCHASE_MS = 14 * 24 * 60 * 60 * 1000
 
 export interface RecipeIngredientInput {
   name: string
@@ -148,4 +153,129 @@ export async function deleteRecipe(
   if (!row || row.householdId !== householdId || row.archived) return 'not-found'
   await db.update(recipes).set({ archived: true }).where(eq(recipes.id, recipeId))
   return 'ok'
+}
+
+async function onListItemIds(db: Db, householdId: string): Promise<Set<string>> {
+  const rows = await db
+    .select({ itemId: shoppingEntries.itemId })
+    .from(shoppingEntries)
+    .where(and(eq(shoppingEntries.householdId, householdId), eq(shoppingEntries.status, 'needed')))
+  return new Set(rows.map((r) => r.itemId))
+}
+
+async function recentlyPurchasedItemIds(
+  db: Db,
+  householdId: string,
+  since: number,
+): Promise<Set<string>> {
+  const rows = await db
+    .select({ itemId: shoppingEntries.itemId })
+    .from(shoppingEntries)
+    .where(
+      and(
+        eq(shoppingEntries.householdId, householdId),
+        eq(shoppingEntries.status, 'purchased'),
+        gte(shoppingEntries.purchasedAt, since),
+      ),
+    )
+  return new Set(rows.map((r) => r.itemId))
+}
+
+async function lastCookedByRecipe(db: Db, householdId: string): Promise<Map<string, number>> {
+  const rows = await db
+    .select({ recipeId: mealLogs.recipeId, cookedAt: mealLogs.cookedAt })
+    .from(mealLogs)
+    .where(eq(mealLogs.householdId, householdId))
+  const map = new Map<string, number>()
+  for (const row of rows) {
+    const prev = map.get(row.recipeId)
+    if (prev == null || row.cookedAt > prev) map.set(row.recipeId, row.cookedAt)
+  }
+  return map
+}
+
+/**
+ * Cook a recipe: add its missing ingredients (§ the heuristic in shared/meal/missing) to the
+ * shopping list and log the meal. Returns how many items were added. This is the Phase 5 exit.
+ */
+export async function cookRecipe(
+  db: Db,
+  householdId: string,
+  memberId: string,
+  now: number,
+  recipeId: string,
+): Promise<{ added: number } | 'not-found'> {
+  const [recipe] = await db.select().from(recipes).where(eq(recipes.id, recipeId)).limit(1)
+  if (!recipe || recipe.householdId !== householdId || recipe.archived) return 'not-found'
+
+  const ingredients = await db
+    .select({ itemId: recipeIngredients.itemId, staple: recipeIngredients.staple })
+    .from(recipeIngredients)
+    .where(eq(recipeIngredients.recipeId, recipeId))
+  const missing = computeMissing({
+    ingredients,
+    onListItemIds: await onListItemIds(db, householdId),
+    recentlyPurchasedItemIds: await recentlyPurchasedItemIds(
+      db,
+      householdId,
+      now - RECENT_PURCHASE_MS,
+    ),
+  })
+  for (const itemId of missing) {
+    await addToList(db, householdId, memberId, now, { itemId })
+  }
+  await db.insert(mealLogs).values({
+    id: crypto.randomUUID(),
+    householdId,
+    recipeId,
+    cookedBy: memberId,
+    cookedAt: now,
+  })
+  return { added: missing.length }
+}
+
+export interface SuggestedMeal extends RecipeView {
+  missingCount: number
+}
+
+export interface MealPrefs {
+  maxCookMinutes?: number
+  requiredTags?: string[]
+}
+
+/** All recipes, annotated with their missing-ingredient count and ranked by the recommender. */
+export async function suggestMeals(
+  db: Db,
+  householdId: string,
+  now: number,
+  prefs: MealPrefs,
+): Promise<SuggestedMeal[]> {
+  const list = await listRecipes(db, householdId)
+  if (list.length === 0) return []
+
+  const onList = await onListItemIds(db, householdId)
+  const recent = await recentlyPurchasedItemIds(db, householdId, now - RECENT_PURCHASE_MS)
+  const lastCooked = await lastCookedByRecipe(db, householdId)
+
+  const byRecipe = new Map<string, SuggestedMeal>()
+  const candidates: RecipeCandidate[] = list.map((recipe) => {
+    const missingCount = computeMissing({
+      ingredients: recipe.ingredients.map((i) => ({ itemId: i.itemId, staple: i.staple })),
+      onListItemIds: onList,
+      recentlyPurchasedItemIds: recent,
+    }).length
+    byRecipe.set(recipe.id, { ...recipe, missingCount })
+    return {
+      recipeId: recipe.id,
+      cookMinutes: recipe.cookMinutes,
+      dietaryTags: recipe.dietaryTags,
+      missingCount,
+      lastCookedAt: lastCooked.get(recipe.id) ?? null,
+    }
+  })
+
+  return recommendMeals(candidates, prefs).flatMap((c) => {
+    const meal = byRecipe.get(c.recipeId)
+    return meal ? [meal] : []
+  })
 }

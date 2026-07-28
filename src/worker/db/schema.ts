@@ -298,3 +298,21 @@ export const recipeIngredients = sqliteTable(
   },
   (t) => [index('recipe_ingredients_recipe_idx').on(t.recipeId)],
 )
+
+export const mealLogs = sqliteTable(
+  'meal_logs',
+  {
+    id: text('id').primaryKey(),
+    householdId: text('household_id')
+      .notNull()
+      .references(() => households.id),
+    recipeId: text('recipe_id')
+      .notNull()
+      .references(() => recipes.id),
+    cookedBy: text('cooked_by')
+      .notNull()
+      .references(() => members.id),
+    cookedAt: integer('cooked_at').notNull(),
+  },
+  (t) => [index('meal_logs_household_idx').on(t.householdId, t.cookedAt)],
+)

@@ -12,6 +12,7 @@ import {
   type CatalogChoreInput,
   claimOccurrence,
   completeOccurrence,
+  cookRecipe,
   createChore,
   createHousehold,
   createInvite,
@@ -27,7 +28,6 @@ import {
   type HouseholdView,
   listGroceryItems,
   listOccurrences,
-  listRecipes,
   listSuggestions,
   type MissedPolicy,
   type OccurrenceView,
@@ -37,6 +37,7 @@ import {
   type ShoppingEntry,
   type SuggestionView,
   skipOccurrence,
+  suggestMeals,
   type TemporalStatus,
   updateSettings,
 } from './api.ts'
@@ -1117,9 +1118,20 @@ function MealsSection() {
   const [cookMinutes, setCookMinutes] = useState('')
   const [servings, setServings] = useState('')
   const [tags, setTags] = useState<Set<string>>(new Set())
+  const [filterCook, setFilterCook] = useState('')
+  const [filterTags, setFilterTags] = useState<Set<string>>(new Set())
+  const [cookedMsg, setCookedMsg] = useState<string | null>(null)
 
-  const recipesQuery = useQuery({ queryKey: ['recipes'], queryFn: listRecipes })
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['recipes'] })
+  const filterTagKey = [...filterTags].sort().join(',')
+  const recipesQuery = useQuery({
+    queryKey: ['meals', filterCook, filterTagKey],
+    queryFn: () =>
+      suggestMeals({
+        maxCookMinutes: filterCook.trim() ? Number(filterCook) : undefined,
+        requiredTags: [...filterTags],
+      }),
+  })
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['meals'] })
 
   const save = useMutation({
     mutationFn: () =>
@@ -1146,6 +1158,25 @@ function MealsSection() {
     },
   })
   const remove = useMutation({ mutationFn: deleteRecipe, onSuccess: invalidate })
+  const cook = useMutation({
+    mutationFn: cookRecipe,
+    onSuccess: (data) => {
+      setCookedMsg(
+        data.added > 0
+          ? `Added ${data.added} ingredient${data.added === 1 ? '' : 's'} to the shopping list.`
+          : 'You already have everything for that.',
+      )
+      invalidate()
+      void queryClient.invalidateQueries({ queryKey: ['shopping'] })
+    },
+  })
+  const toggleFilterTag = (tag: string) =>
+    setFilterTags((prev) => {
+      const next = new Set(prev)
+      if (next.has(tag)) next.delete(tag)
+      else next.add(tag)
+      return next
+    })
 
   const suggestion = suggestIngredients(name)
   const useSuggestion = () => {
@@ -1177,9 +1208,37 @@ function MealsSection() {
 
   return (
     <Card title="Meals">
+      {cookedMsg && <p className="text-success text-sm">{cookedMsg}</p>}
+
       {recipes.length === 0 && (
         <p className="text-base-content/50 text-sm">No recipes yet. Add one below.</p>
       )}
+
+      {recipes.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-base-content/50">Suggest:</span>
+          <input
+            value={filterCook}
+            onChange={(e) => setFilterCook(e.target.value)}
+            inputMode="numeric"
+            placeholder="≤ min"
+            aria-label="Max cook minutes"
+            className="input input-bordered input-xs w-20"
+          />
+          {DIETARY_TAGS.map((tag) => (
+            <label key={tag} className="label cursor-pointer gap-1 text-xs">
+              <input
+                type="checkbox"
+                checked={filterTags.has(tag)}
+                onChange={() => toggleFilterTag(tag)}
+                className="checkbox checkbox-xs"
+              />
+              <span>{tag}</span>
+            </label>
+          ))}
+        </div>
+      )}
+
       {recipes.length > 0 && (
         <ul className="flex flex-col divide-y divide-base-200">
           {recipes.map((recipe) => (
@@ -1212,15 +1271,33 @@ function MealsSection() {
                 <span className="text-base-content/50 text-xs">
                   {recipe.ingredients.map((i) => i.name).join(', ')}
                 </span>
+                <span className="text-xs">
+                  {recipe.missingCount === 0 ? (
+                    <span className="text-success">✓ have everything</span>
+                  ) : (
+                    <span className="text-base-content/60">
+                      needs {recipe.missingCount} item{recipe.missingCount === 1 ? '' : 's'}
+                    </span>
+                  )}
+                </span>
               </div>
-              <button
-                type="button"
-                onClick={() => remove.mutate(recipe.id)}
-                aria-label={`Delete ${recipe.name}`}
-                className="btn btn-square btn-ghost btn-sm"
-              >
-                ✕
-              </button>
+              <div className="flex shrink-0 items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => cook.mutate(recipe.id)}
+                  className="btn btn-primary btn-sm"
+                >
+                  Cook
+                </button>
+                <button
+                  type="button"
+                  onClick={() => remove.mutate(recipe.id)}
+                  aria-label={`Delete ${recipe.name}`}
+                  className="btn btn-square btn-ghost btn-sm"
+                >
+                  ✕
+                </button>
+              </div>
             </li>
           ))}
         </ul>
