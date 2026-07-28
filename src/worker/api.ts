@@ -38,9 +38,11 @@ import {
   cookRecipe,
   createRecipe,
   deleteRecipe,
+  listMealHistory,
   listRecipes,
   type NewRecipe,
   suggestMeals,
+  updateRecipe,
 } from './meals.ts'
 import { pushConfigured, sendPush } from './push.ts'
 import { announceActivity } from './reminders.ts'
@@ -640,4 +642,39 @@ api.post('/meals/recipes/:id/cook', async (c) => {
   )
   if (result === 'not-found') return c.json({ error: 'not found' }, 404)
   return c.json(result)
+})
+
+api.post('/meals/recipes/:id/update', async (c) => {
+  const user = c.get('user')
+  const ctx = await callerContext(c.env, user.id)
+  if (!ctx) return c.json({ error: 'no household' }, 404)
+  const body = await c.req.json<Partial<NewRecipe>>()
+  if (!body.name?.trim() || !Array.isArray(body.ingredients)) {
+    return c.json({ error: 'name and ingredients are required' }, 400)
+  }
+  const result = await updateRecipe(
+    getDb(c.env.DB),
+    ctx.household.id,
+    c.req.param('id'),
+    Date.now(),
+    {
+      name: body.name,
+      dietaryTags: body.dietaryTags,
+      cookMinutes: body.cookMinutes,
+      servings: body.servings,
+      ingredients: body.ingredients,
+    },
+  )
+  if (result === 'not-found') return c.json({ error: 'not found' }, 404)
+  if (result === 'invalid') return c.json({ error: 'a name and at least one ingredient' }, 400)
+  if (result === 'exists') return c.json({ error: 'a recipe with that name already exists' }, 409)
+  return c.json({ ok: true })
+})
+
+api.get('/meals/history', async (c) => {
+  const user = c.get('user')
+  const ctx = await callerContext(c.env, user.id)
+  if (!ctx) return c.json({ error: 'no household' }, 404)
+  const history = await listMealHistory(getDb(c.env.DB), ctx.household.id)
+  return c.json({ history })
 })
