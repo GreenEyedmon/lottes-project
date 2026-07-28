@@ -11,7 +11,7 @@ import type { Db } from './db/index.ts'
 import { groceryItems, shoppingEntries } from './db/schema.ts'
 
 /** Lowercase, trim, collapse internal whitespace — the dedupe key for an item name. */
-function normalizeNameKey(name: string): string {
+export function normalizeNameKey(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, ' ')
 }
 

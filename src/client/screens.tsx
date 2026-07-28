@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { type FormEvent, type ReactNode, useState } from 'react'
 import { CATALOG, describeRecurrence } from '../shared/chore/catalog.ts'
+import { suggestIngredients } from '../shared/meal/dishes.ts'
 import {
   acceptInvite,
   acceptSuggestion,
@@ -14,7 +15,9 @@ import {
   createChore,
   createHousehold,
   createInvite,
+  createRecipe,
   createTask,
+  deleteRecipe,
   dismissSuggestion,
   type GroceryItem,
   getCurrentHousehold,
@@ -24,6 +27,7 @@ import {
   type HouseholdView,
   listGroceryItems,
   listOccurrences,
+  listRecipes,
   listSuggestions,
   type MissedPolicy,
   type OccurrenceView,
@@ -1090,9 +1094,246 @@ function ShoppingSection({ view }: { view: HouseholdView }) {
   )
 }
 
+interface IngredientDraft {
+  id: string
+  name: string
+  quantity: string
+  staple: boolean
+}
+
+const makeIngredientRow = (): IngredientDraft => ({
+  id: crypto.randomUUID(),
+  name: '',
+  quantity: '',
+  staple: false,
+})
+
+const DIETARY_TAGS = ['vegetarian', 'vegan', 'gluten-free']
+
+function MealsSection() {
+  const queryClient = useQueryClient()
+  const [name, setName] = useState('')
+  const [ingredients, setIngredients] = useState<IngredientDraft[]>(() => [makeIngredientRow()])
+  const [cookMinutes, setCookMinutes] = useState('')
+  const [servings, setServings] = useState('')
+  const [tags, setTags] = useState<Set<string>>(new Set())
+
+  const recipesQuery = useQuery({ queryKey: ['recipes'], queryFn: listRecipes })
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['recipes'] })
+
+  const save = useMutation({
+    mutationFn: () =>
+      createRecipe({
+        name,
+        dietaryTags: [...tags],
+        cookMinutes: cookMinutes.trim() ? Number(cookMinutes) : undefined,
+        servings: servings.trim() ? Number(servings) : undefined,
+        ingredients: ingredients
+          .filter((row) => row.name.trim())
+          .map((row) => ({
+            name: row.name.trim(),
+            quantity: row.quantity.trim() || undefined,
+            staple: row.staple,
+          })),
+      }),
+    onSuccess: () => {
+      setName('')
+      setIngredients([makeIngredientRow()])
+      setCookMinutes('')
+      setServings('')
+      setTags(new Set())
+      invalidate()
+    },
+  })
+  const remove = useMutation({ mutationFn: deleteRecipe, onSuccess: invalidate })
+
+  const suggestion = suggestIngredients(name)
+  const useSuggestion = () => {
+    if (!suggestion) return
+    setIngredients([
+      ...suggestion.map((s) => ({
+        id: crypto.randomUUID(),
+        name: s.name,
+        quantity: '',
+        staple: !!s.staple,
+      })),
+      makeIngredientRow(),
+    ])
+  }
+
+  const setIngredient = (id: string, patch: Partial<IngredientDraft>) =>
+    setIngredients((rows) => rows.map((row) => (row.id === id ? { ...row, ...patch } : row)))
+  const removeIngredientRow = (id: string) =>
+    setIngredients((rows) => (rows.length > 1 ? rows.filter((row) => row.id !== id) : rows))
+  const toggleTag = (tag: string) =>
+    setTags((prev) => {
+      const next = new Set(prev)
+      if (next.has(tag)) next.delete(tag)
+      else next.add(tag)
+      return next
+    })
+
+  const recipes = recipesQuery.data ?? []
+
+  return (
+    <Card title="Meals">
+      {recipes.length === 0 && (
+        <p className="text-base-content/50 text-sm">No recipes yet. Add one below.</p>
+      )}
+      {recipes.length > 0 && (
+        <ul className="flex flex-col divide-y divide-base-200">
+          {recipes.map((recipe) => (
+            <li key={recipe.id} className="flex items-start justify-between gap-2 py-2">
+              <div className="flex flex-col gap-1">
+                <span className="font-medium">
+                  {recipe.name}
+                  {recipe.cookMinutes != null && (
+                    <span className="text-base-content/50 text-xs">
+                      {' '}
+                      · {recipe.cookMinutes} min
+                    </span>
+                  )}
+                  {recipe.servings != null && (
+                    <span className="text-base-content/50 text-xs">
+                      {' '}
+                      · serves {recipe.servings}
+                    </span>
+                  )}
+                </span>
+                {recipe.dietaryTags.length > 0 && (
+                  <span className="flex flex-wrap gap-1">
+                    {recipe.dietaryTags.map((t) => (
+                      <span key={t} className="badge badge-ghost badge-sm">
+                        {t}
+                      </span>
+                    ))}
+                  </span>
+                )}
+                <span className="text-base-content/50 text-xs">
+                  {recipe.ingredients.map((i) => i.name).join(', ')}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => remove.mutate(recipe.id)}
+                aria-label={`Delete ${recipe.name}`}
+                className="btn btn-square btn-ghost btn-sm"
+              >
+                ✕
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          save.mutate()
+        }}
+        className="flex flex-col gap-2"
+      >
+        <input
+          required
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Dish name (e.g. Spaghetti bolognese)"
+          aria-label="Dish name"
+          className="input input-bordered input-sm"
+        />
+        {suggestion && (
+          <button type="button" onClick={useSuggestion} className="btn btn-outline btn-xs w-fit">
+            Use suggested ingredients ({suggestion.length})
+          </button>
+        )}
+        <div className="flex flex-col gap-1">
+          {ingredients.map((row, idx) => (
+            <div key={row.id} className="flex items-center gap-1">
+              <input
+                value={row.name}
+                onChange={(e) => setIngredient(row.id, { name: e.target.value })}
+                placeholder="Ingredient"
+                aria-label={`Ingredient ${idx + 1}`}
+                className="input input-bordered input-xs flex-1"
+              />
+              <input
+                value={row.quantity}
+                onChange={(e) => setIngredient(row.id, { quantity: e.target.value })}
+                placeholder="Qty"
+                aria-label={`Quantity ${idx + 1}`}
+                className="input input-bordered input-xs w-16"
+              />
+              <label
+                className="label cursor-pointer gap-1 text-xs"
+                title="Pantry staple — not auto-added to the list"
+              >
+                <input
+                  type="checkbox"
+                  checked={row.staple}
+                  onChange={(e) => setIngredient(row.id, { staple: e.target.checked })}
+                  className="checkbox checkbox-xs"
+                />
+                <span>staple</span>
+              </label>
+              <button
+                type="button"
+                onClick={() => removeIngredientRow(row.id)}
+                aria-label={`Remove ingredient ${idx + 1}`}
+                className="btn btn-square btn-ghost btn-xs"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => setIngredients((rows) => [...rows, makeIngredientRow()])}
+            className="btn btn-ghost btn-xs w-fit"
+          >
+            + ingredient
+          </button>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            value={cookMinutes}
+            onChange={(e) => setCookMinutes(e.target.value)}
+            inputMode="numeric"
+            placeholder="Cook min"
+            aria-label="Cook minutes"
+            className="input input-bordered input-xs w-24"
+          />
+          <input
+            value={servings}
+            onChange={(e) => setServings(e.target.value)}
+            inputMode="numeric"
+            placeholder="Serves"
+            aria-label="Servings"
+            className="input input-bordered input-xs w-20"
+          />
+          {DIETARY_TAGS.map((tag) => (
+            <label key={tag} className="label cursor-pointer gap-1 text-xs">
+              <input
+                type="checkbox"
+                checked={tags.has(tag)}
+                onChange={() => toggleTag(tag)}
+                className="checkbox checkbox-xs"
+              />
+              <span>{tag}</span>
+            </label>
+          ))}
+        </div>
+        <button type="submit" className="btn btn-neutral btn-sm w-fit">
+          Save recipe
+        </button>
+        {save.error && <p className="text-error text-xs">{errorMessage(save.error)}</p>}
+      </form>
+    </Card>
+  )
+}
+
 function HouseholdHome({ view }: { view: HouseholdView }) {
   const queryClient = useQueryClient()
-  const [tab, setTab] = useState<'chores' | 'shopping'>('chores')
+  const [tab, setTab] = useState<'chores' | 'shopping' | 'meals'>('chores')
   const [roomName, setRoomName] = useState('')
   const [inviteLink, setInviteLink] = useState<string | null>(null)
 
@@ -1141,16 +1382,24 @@ function HouseholdHome({ view }: { view: HouseholdView }) {
           >
             Shopping
           </button>
+          <button
+            type="button"
+            role="tab"
+            onClick={() => setTab('meals')}
+            className={`tab flex-1 ${tab === 'meals' ? 'tab-active' : ''}`}
+          >
+            Meals
+          </button>
         </div>
 
-        {tab === 'chores' ? (
+        {tab === 'chores' && (
           <>
             <ChoresSection view={view} />
             <HistorySection />
           </>
-        ) : (
-          <ShoppingSection view={view} />
         )}
+        {tab === 'shopping' && <ShoppingSection view={view} />}
+        {tab === 'meals' && <MealsSection />}
 
         <Card title="Members">
           <ul className="flex flex-col gap-1">
