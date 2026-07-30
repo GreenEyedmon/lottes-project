@@ -1162,6 +1162,84 @@ const makeIngredientRow = (): IngredientDraft => ({
 
 const DIETARY_TAGS = ['vegetarian', 'vegan', 'gluten-free']
 
+/** Choose which of a recipe's ingredients to add to the shopping list before cooking. */
+function CookModal({
+  recipe,
+  pending,
+  onConfirm,
+  onClose,
+}: {
+  recipe: SuggestedMeal
+  pending: boolean
+  onConfirm: (itemIds: string[]) => void
+  onClose: () => void
+}) {
+  // Missing ingredients start checked; things you likely have (and staples) start unchecked.
+  const [checked, setChecked] = useState<Set<string>>(
+    () => new Set(recipe.ingredients.filter((i) => i.missing).map((i) => i.itemId)),
+  )
+  const toggle = (itemId: string) =>
+    setChecked((prev) => {
+      const next = new Set(prev)
+      if (next.has(itemId)) next.delete(itemId)
+      else next.add(itemId)
+      return next
+    })
+
+  return (
+    <div className="modal modal-open">
+      <div className="modal-box">
+        <h3 className="font-semibold text-lg">Cook {recipe.name}</h3>
+        <p className="text-base-content/60 text-sm">Pick what you need to add to the list.</p>
+        <ul className="my-3 flex flex-col gap-1">
+          {recipe.ingredients.map((ingredient) => (
+            <li key={ingredient.itemId}>
+              <label className="label cursor-pointer justify-start gap-2">
+                <input
+                  type="checkbox"
+                  checked={checked.has(ingredient.itemId)}
+                  onChange={() => toggle(ingredient.itemId)}
+                  className="checkbox checkbox-sm"
+                />
+                <span className="flex-1">
+                  {ingredient.name}
+                  {ingredient.quantity && (
+                    <span className="text-base-content/50">
+                      {' '}
+                      · {formatQuantity(ingredient.quantity)}
+                    </span>
+                  )}
+                </span>
+                {!ingredient.missing && (
+                  <span className="text-base-content/40 text-xs">
+                    {ingredient.staple ? 'staple' : 'likely have'}
+                  </span>
+                )}
+              </label>
+            </li>
+          ))}
+        </ul>
+        <div className="modal-action">
+          <button type="button" onClick={onClose} className="btn btn-ghost btn-sm">
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => onConfirm([...checked])}
+            disabled={pending}
+            className="btn btn-primary btn-sm"
+          >
+            {checked.size > 0 ? `Cook · add ${checked.size}` : 'Cook'}
+          </button>
+        </div>
+      </div>
+      <button type="button" onClick={onClose} aria-label="Close" className="modal-backdrop">
+        close
+      </button>
+    </div>
+  )
+}
+
 function MealsSection({ view }: { view: HouseholdView }) {
   const queryClient = useQueryClient()
   const [name, setName] = useState('')
@@ -1173,6 +1251,7 @@ function MealsSection({ view }: { view: HouseholdView }) {
   const [filterCook, setFilterCook] = useState('')
   const [filterTags, setFilterTags] = useState<Set<string>>(new Set())
   const [cookedMsg, setCookedMsg] = useState<string | null>(null)
+  const [cookTarget, setCookTarget] = useState<SuggestedMeal | null>(null)
 
   const filterTagKey = [...filterTags].sort().join(',')
   const recipesQuery = useQuery({
@@ -1240,12 +1319,13 @@ function MealsSection({ view }: { view: HouseholdView }) {
   }
   const remove = useMutation({ mutationFn: deleteRecipe, onSuccess: invalidate })
   const cook = useMutation({
-    mutationFn: cookRecipe,
+    mutationFn: (args: { id: string; itemIds?: string[] }) => cookRecipe(args.id, args.itemIds),
     onSuccess: (data) => {
+      setCookTarget(null)
       setCookedMsg(
         data.added > 0
           ? `Added ${data.added} ingredient${data.added === 1 ? '' : 's'} to the shopping list.`
-          : 'You already have everything for that.',
+          : 'Nothing added to the list.',
       )
       invalidate()
       void queryClient.invalidateQueries({ queryKey: ['shopping'] })
@@ -1292,244 +1372,254 @@ function MealsSection({ view }: { view: HouseholdView }) {
   const history = historyQuery.data ?? []
 
   return (
-    <Card title="Meals">
-      {cookedMsg && <p className="text-success text-sm">{cookedMsg}</p>}
-
-      {recipes.length === 0 && (
-        <p className="text-base-content/50 text-sm">No recipes yet. Add one below.</p>
-      )}
-
-      {recipes.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="text-base-content/50">Suggest:</span>
-          <input
-            value={filterCook}
-            onChange={(e) => setFilterCook(e.target.value)}
-            inputMode="numeric"
-            placeholder="≤ min"
-            aria-label="Max cook minutes"
-            className="input input-bordered input-xs w-20"
-          />
-          {DIETARY_TAGS.map((tag) => (
-            <label key={tag} className="label cursor-pointer gap-1 text-xs">
-              <input
-                type="checkbox"
-                checked={filterTags.has(tag)}
-                onChange={() => toggleFilterTag(tag)}
-                className="checkbox checkbox-xs"
-              />
-              <span>{tag}</span>
-            </label>
-          ))}
-        </div>
-      )}
-
-      {recipes.length > 0 && (
-        <ul className="flex flex-col divide-y divide-base-200">
-          {recipes.map((recipe) => (
-            <li key={recipe.id} className="flex items-start justify-between gap-2 py-2">
-              <div className="flex flex-col gap-1">
-                <span className="font-medium">
-                  {recipe.name}
-                  {recipe.cookMinutes != null && (
-                    <span className="text-base-content/50 text-xs">
-                      {' '}
-                      · {recipe.cookMinutes} min
-                    </span>
-                  )}
-                  {recipe.servings != null && (
-                    <span className="text-base-content/50 text-xs">
-                      {' '}
-                      · serves {recipe.servings}
-                    </span>
-                  )}
-                </span>
-                {recipe.dietaryTags.length > 0 && (
-                  <span className="flex flex-wrap gap-1">
-                    {recipe.dietaryTags.map((t) => (
-                      <span key={t} className="badge badge-ghost badge-sm">
-                        {t}
-                      </span>
-                    ))}
-                  </span>
-                )}
-                <span className="text-base-content/50 text-xs">
-                  {recipe.ingredients.map((i) => i.name).join(', ')}
-                </span>
-                <span className="text-xs">
-                  {recipe.missingCount === 0 ? (
-                    <span className="text-success">Have everything</span>
-                  ) : (
-                    <span className="text-base-content/60">
-                      needs {recipe.missingCount} item{recipe.missingCount === 1 ? '' : 's'}
-                    </span>
-                  )}
-                </span>
-              </div>
-              <div className="flex shrink-0 items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => cook.mutate(recipe.id)}
-                  className="btn btn-primary btn-sm"
-                >
-                  Cook
-                </button>
-                <button
-                  type="button"
-                  onClick={() => startEdit(recipe)}
-                  aria-label={`Edit ${recipe.name}`}
-                  className="btn btn-ghost btn-sm"
-                >
-                  Edit
-                </button>
-                <button
-                  type="button"
-                  onClick={() => remove.mutate(recipe.id)}
-                  className="btn btn-ghost btn-sm text-base-content/60"
-                >
-                  Delete
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <form
-        onSubmit={(e) => {
-          e.preventDefault()
-          save.mutate()
-        }}
-        className="flex flex-col gap-2"
-      >
-        {editingId && (
-          <div className="flex items-center justify-between">
-            <span className="font-semibold text-base-content/60 text-xs">Editing recipe</span>
-            <button type="button" onClick={resetForm} className="btn btn-ghost btn-xs">
-              Cancel
-            </button>
-          </div>
-        )}
-        <input
-          required
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Dish name (e.g. Spaghetti bolognese)"
-          aria-label="Dish name"
-          className="input input-bordered input-sm"
+    <>
+      {cookTarget && (
+        <CookModal
+          recipe={cookTarget}
+          pending={cook.isPending}
+          onConfirm={(itemIds) => cook.mutate({ id: cookTarget.id, itemIds })}
+          onClose={() => setCookTarget(null)}
         />
-        {suggestion && (
-          <button type="button" onClick={useSuggestion} className="btn btn-outline btn-xs w-fit">
-            Use suggested ingredients ({suggestion.length})
-          </button>
+      )}
+      <Card title="Meals">
+        {cookedMsg && <p className="text-success text-sm">{cookedMsg}</p>}
+
+        {recipes.length === 0 && (
+          <p className="text-base-content/50 text-sm">No recipes yet. Add one below.</p>
         )}
-        <div className="flex flex-col gap-1">
-          {ingredients.map((row, idx) => (
-            <div key={row.id} className="flex items-center gap-1">
-              <input
-                value={row.name}
-                onChange={(e) => setIngredient(row.id, { name: e.target.value })}
-                placeholder="Ingredient"
-                aria-label={`Ingredient ${idx + 1}`}
-                className="input input-bordered input-xs flex-1"
-              />
-              <input
-                value={row.quantity}
-                onChange={(e) => setIngredient(row.id, { quantity: e.target.value })}
-                placeholder="Qty"
-                aria-label={`Quantity ${idx + 1}`}
-                className="input input-bordered input-xs w-16"
-              />
-              <label
-                className="label cursor-pointer gap-1 text-xs"
-                title="Pantry staple — not auto-added to the list"
-              >
+
+        {recipes.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="text-base-content/50">Suggest:</span>
+            <input
+              value={filterCook}
+              onChange={(e) => setFilterCook(e.target.value)}
+              inputMode="numeric"
+              placeholder="≤ min"
+              aria-label="Max cook minutes"
+              className="input input-bordered input-xs w-20"
+            />
+            {DIETARY_TAGS.map((tag) => (
+              <label key={tag} className="label cursor-pointer gap-1 text-xs">
                 <input
                   type="checkbox"
-                  checked={row.staple}
-                  onChange={(e) => setIngredient(row.id, { staple: e.target.checked })}
+                  checked={filterTags.has(tag)}
+                  onChange={() => toggleFilterTag(tag)}
                   className="checkbox checkbox-xs"
                 />
-                <span>staple</span>
+                <span>{tag}</span>
               </label>
-              <button
-                type="button"
-                onClick={() => removeIngredientRow(row.id)}
-                aria-label={`Remove ingredient ${idx + 1}`}
-                className="btn btn-ghost btn-xs text-base-content/60"
-              >
-                Remove
-              </button>
-            </div>
-          ))}
-          <button
-            type="button"
-            onClick={() => setIngredients((rows) => [...rows, makeIngredientRow()])}
-            className="btn btn-ghost btn-xs w-fit"
-          >
-            + ingredient
-          </button>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <input
-            value={cookMinutes}
-            onChange={(e) => setCookMinutes(e.target.value)}
-            inputMode="numeric"
-            placeholder="Cook min"
-            aria-label="Cook minutes"
-            className="input input-bordered input-xs w-24"
-          />
-          <input
-            value={servings}
-            onChange={(e) => setServings(e.target.value)}
-            inputMode="numeric"
-            placeholder="Serves"
-            aria-label="Servings"
-            className="input input-bordered input-xs w-20"
-          />
-          {DIETARY_TAGS.map((tag) => (
-            <label key={tag} className="label cursor-pointer gap-1 text-xs">
-              <input
-                type="checkbox"
-                checked={tags.has(tag)}
-                onChange={() => toggleTag(tag)}
-                className="checkbox checkbox-xs"
-              />
-              <span>{tag}</span>
-            </label>
-          ))}
-        </div>
-        <button type="submit" className="btn btn-primary btn-sm w-fit">
-          {editingId ? 'Save changes' : 'Save recipe'}
-        </button>
-        {save.error && <p className="text-error text-xs">{errorMessage(save.error)}</p>}
-      </form>
+            ))}
+          </div>
+        )}
 
-      {history.length > 0 && (
-        <div className="flex flex-col gap-1">
-          <p className="font-semibold text-base-content/50 text-xs">Recently cooked</p>
+        {recipes.length > 0 && (
           <ul className="flex flex-col divide-y divide-base-200">
-            {history.map((entry) => (
-              <li key={entry.id} className="flex items-center justify-between gap-2 py-1.5">
-                <span className="flex flex-col">
-                  <span className="text-sm">{entry.recipeName}</span>
-                  <span className="text-base-content/50 text-xs">
-                    {memberName(entry.cookedBy)} · {timeAgo(entry.cookedAt)}
+            {recipes.map((recipe) => (
+              <li key={recipe.id} className="flex items-start justify-between gap-2 py-2">
+                <div className="flex flex-col gap-1">
+                  <span className="font-medium">
+                    {recipe.name}
+                    {recipe.cookMinutes != null && (
+                      <span className="text-base-content/50 text-xs">
+                        {' '}
+                        · {recipe.cookMinutes} min
+                      </span>
+                    )}
+                    {recipe.servings != null && (
+                      <span className="text-base-content/50 text-xs">
+                        {' '}
+                        · serves {recipe.servings}
+                      </span>
+                    )}
                   </span>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => cook.mutate(entry.recipeId)}
-                  className="btn btn-ghost btn-xs"
-                >
-                  Cook again
-                </button>
+                  {recipe.dietaryTags.length > 0 && (
+                    <span className="flex flex-wrap gap-1">
+                      {recipe.dietaryTags.map((t) => (
+                        <span key={t} className="badge badge-ghost badge-sm">
+                          {t}
+                        </span>
+                      ))}
+                    </span>
+                  )}
+                  <span className="text-base-content/50 text-xs">
+                    {recipe.ingredients.map((i) => i.name).join(', ')}
+                  </span>
+                  <span className="text-xs">
+                    {recipe.missingCount === 0 ? (
+                      <span className="text-success">Have everything</span>
+                    ) : (
+                      <span className="text-base-content/60">
+                        needs {recipe.missingCount} item{recipe.missingCount === 1 ? '' : 's'}
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setCookTarget(recipe)}
+                    className="btn btn-primary btn-sm"
+                  >
+                    Cook
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => startEdit(recipe)}
+                    aria-label={`Edit ${recipe.name}`}
+                    className="btn btn-ghost btn-sm"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => remove.mutate(recipe.id)}
+                    className="btn btn-ghost btn-sm text-base-content/60"
+                  >
+                    Delete
+                  </button>
+                </div>
               </li>
             ))}
           </ul>
-        </div>
-      )}
-    </Card>
+        )}
+
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            save.mutate()
+          }}
+          className="flex flex-col gap-2"
+        >
+          {editingId && (
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-base-content/60 text-xs">Editing recipe</span>
+              <button type="button" onClick={resetForm} className="btn btn-ghost btn-xs">
+                Cancel
+              </button>
+            </div>
+          )}
+          <input
+            required
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Dish name (e.g. Spaghetti bolognese)"
+            aria-label="Dish name"
+            className="input input-bordered input-sm"
+          />
+          {suggestion && (
+            <button type="button" onClick={useSuggestion} className="btn btn-outline btn-xs w-fit">
+              Use suggested ingredients ({suggestion.length})
+            </button>
+          )}
+          <div className="flex flex-col gap-1">
+            {ingredients.map((row, idx) => (
+              <div key={row.id} className="flex items-center gap-1">
+                <input
+                  value={row.name}
+                  onChange={(e) => setIngredient(row.id, { name: e.target.value })}
+                  placeholder="Ingredient"
+                  aria-label={`Ingredient ${idx + 1}`}
+                  className="input input-bordered input-xs flex-1"
+                />
+                <input
+                  value={row.quantity}
+                  onChange={(e) => setIngredient(row.id, { quantity: e.target.value })}
+                  placeholder="Qty"
+                  aria-label={`Quantity ${idx + 1}`}
+                  className="input input-bordered input-xs w-16"
+                />
+                <label
+                  className="label cursor-pointer gap-1 text-xs"
+                  title="Pantry staple — not auto-added to the list"
+                >
+                  <input
+                    type="checkbox"
+                    checked={row.staple}
+                    onChange={(e) => setIngredient(row.id, { staple: e.target.checked })}
+                    className="checkbox checkbox-xs"
+                  />
+                  <span>staple</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => removeIngredientRow(row.id)}
+                  aria-label={`Remove ingredient ${idx + 1}`}
+                  className="btn btn-ghost btn-xs text-base-content/60"
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => setIngredients((rows) => [...rows, makeIngredientRow()])}
+              className="btn btn-ghost btn-xs w-fit"
+            >
+              + ingredient
+            </button>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              value={cookMinutes}
+              onChange={(e) => setCookMinutes(e.target.value)}
+              inputMode="numeric"
+              placeholder="Cook min"
+              aria-label="Cook minutes"
+              className="input input-bordered input-xs w-24"
+            />
+            <input
+              value={servings}
+              onChange={(e) => setServings(e.target.value)}
+              inputMode="numeric"
+              placeholder="Serves"
+              aria-label="Servings"
+              className="input input-bordered input-xs w-20"
+            />
+            {DIETARY_TAGS.map((tag) => (
+              <label key={tag} className="label cursor-pointer gap-1 text-xs">
+                <input
+                  type="checkbox"
+                  checked={tags.has(tag)}
+                  onChange={() => toggleTag(tag)}
+                  className="checkbox checkbox-xs"
+                />
+                <span>{tag}</span>
+              </label>
+            ))}
+          </div>
+          <button type="submit" className="btn btn-primary btn-sm w-fit">
+            {editingId ? 'Save changes' : 'Save recipe'}
+          </button>
+          {save.error && <p className="text-error text-xs">{errorMessage(save.error)}</p>}
+        </form>
+
+        {history.length > 0 && (
+          <div className="flex flex-col gap-1">
+            <p className="font-semibold text-base-content/50 text-xs">Recently cooked</p>
+            <ul className="flex flex-col divide-y divide-base-200">
+              {history.map((entry) => (
+                <li key={entry.id} className="flex items-center justify-between gap-2 py-1.5">
+                  <span className="flex flex-col">
+                    <span className="text-sm">{entry.recipeName}</span>
+                    <span className="text-base-content/50 text-xs">
+                      {memberName(entry.cookedBy)} · {timeAgo(entry.cookedAt)}
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => cook.mutate({ id: entry.recipeId })}
+                    className="btn btn-ghost btn-xs"
+                  >
+                    Cook again
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </Card>
+    </>
   )
 }
 

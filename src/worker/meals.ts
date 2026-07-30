@@ -290,6 +290,7 @@ export async function cookRecipe(
   memberId: string,
   now: number,
   recipeId: string,
+  selectedItemIds?: string[],
 ): Promise<{ added: number } | 'not-found'> {
   const [recipe] = await db.select().from(recipes).where(eq(recipes.id, recipeId)).limit(1)
   if (!recipe || recipe.householdId !== householdId || recipe.archived) return 'not-found'
@@ -298,16 +299,26 @@ export async function cookRecipe(
     .select({ itemId: recipeIngredients.itemId, staple: recipeIngredients.staple })
     .from(recipeIngredients)
     .where(eq(recipeIngredients.recipeId, recipeId))
-  const missing = computeMissing({
-    ingredients,
-    onListItemIds: await onListItemIds(db, householdId),
-    recentlyPurchasedItemIds: await recentlyPurchasedItemIds(
-      db,
-      householdId,
-      now - RECENT_PURCHASE_MS,
-    ),
-  })
-  for (const itemId of missing) {
+
+  let toAdd: string[]
+  if (selectedItemIds) {
+    // Only add ids that actually belong to this recipe; de-dupe.
+    const belongs = new Set(ingredients.map((i) => i.itemId))
+    toAdd = [...new Set(selectedItemIds.filter((id) => belongs.has(id)))]
+  } else {
+    // No explicit selection (e.g. "cook again") → fall back to the missing heuristic.
+    toAdd = computeMissing({
+      ingredients,
+      onListItemIds: await onListItemIds(db, householdId),
+      recentlyPurchasedItemIds: await recentlyPurchasedItemIds(
+        db,
+        householdId,
+        now - RECENT_PURCHASE_MS,
+      ),
+    })
+  }
+
+  for (const itemId of toAdd) {
     await addToList(db, householdId, memberId, now, { itemId })
   }
   await db.insert(mealLogs).values({
@@ -317,10 +328,15 @@ export async function cookRecipe(
     cookedBy: memberId,
     cookedAt: now,
   })
-  return { added: missing.length }
+  return { added: toAdd.length }
 }
 
-export interface SuggestedMeal extends RecipeView {
+export interface SuggestedIngredient extends RecipeIngredientView {
+  missing: boolean
+}
+
+export interface SuggestedMeal extends Omit<RecipeView, 'ingredients'> {
+  ingredients: SuggestedIngredient[]
   missingCount: number
 }
 
@@ -345,17 +361,23 @@ export async function suggestMeals(
 
   const byRecipe = new Map<string, SuggestedMeal>()
   const candidates: RecipeCandidate[] = list.map((recipe) => {
-    const missingCount = computeMissing({
-      ingredients: recipe.ingredients.map((i) => ({ itemId: i.itemId, staple: i.staple })),
-      onListItemIds: onList,
-      recentlyPurchasedItemIds: recent,
-    }).length
-    byRecipe.set(recipe.id, { ...recipe, missingCount })
+    const missing = new Set(
+      computeMissing({
+        ingredients: recipe.ingredients.map((i) => ({ itemId: i.itemId, staple: i.staple })),
+        onListItemIds: onList,
+        recentlyPurchasedItemIds: recent,
+      }),
+    )
+    byRecipe.set(recipe.id, {
+      ...recipe,
+      ingredients: recipe.ingredients.map((i) => ({ ...i, missing: missing.has(i.itemId) })),
+      missingCount: missing.size,
+    })
     return {
       recipeId: recipe.id,
       cookMinutes: recipe.cookMinutes,
       dietaryTags: recipe.dietaryTags,
-      missingCount,
+      missingCount: missing.size,
       lastCookedAt: lastCooked.get(recipe.id) ?? null,
     }
   })
