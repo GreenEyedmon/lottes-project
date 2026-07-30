@@ -93,6 +93,21 @@ api.post('/households', async (c) => {
   return c.json({ id: householdId, name, timeZone }, 201)
 })
 
+/** A member renames themselves — display name is independent of the sign-in email. */
+api.post('/members/me', async (c) => {
+  const user = c.get('user')
+  const ctx = await callerContext(c.env, user.id)
+  if (!ctx) return c.json({ error: 'no household' }, 404)
+  const body = await c.req.json<{ displayName?: string }>()
+  const name = body.displayName?.trim()
+  if (!name) return c.json({ error: 'name is required' }, 400)
+  await getDb(c.env.DB)
+    .update(members)
+    .set({ displayName: name.slice(0, 60) })
+    .where(eq(members.id, ctx.member.id))
+  return c.json({ ok: true })
+})
+
 /** The caller's household with its members and rooms. */
 api.get('/households/current', async (c) => {
   const user = c.get('user')

@@ -55,6 +55,10 @@ export function addRoom(name: string): Promise<{ id: string; name: string }> {
   return request('/api/rooms', { method: 'POST', body: JSON.stringify({ name }) })
 }
 
+export function updateMyName(displayName: string): Promise<{ ok: boolean }> {
+  return request('/api/members/me', { method: 'POST', body: JSON.stringify({ displayName }) })
+}
+
 export type TemporalStatus = 'upcoming' | 'due' | 'overdue'
 
 export interface OccurrenceView {
