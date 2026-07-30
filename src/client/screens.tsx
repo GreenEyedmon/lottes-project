@@ -88,9 +88,7 @@ function Card({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="card border border-base-300 bg-base-100 shadow-sm">
       <div className="card-body gap-3 p-5">
-        <h2 className="font-semibold text-base-content/60 text-sm uppercase tracking-wide">
-          {title}
-        </h2>
+        <h2 className="font-semibold text-base-content/60 text-sm">{title}</h2>
         {children}
       </div>
     </div>
@@ -318,7 +316,7 @@ function OccurrenceRow({
           key={suggestion.id}
           className="flex items-center justify-between gap-2 rounded-box bg-base-200 px-2 py-1"
         >
-          <span className="text-xs">💡 {suggestion.explanation}</span>
+          <span className="text-xs">{suggestion.explanation}</span>
           <span className="flex shrink-0 gap-1">
             <button
               type="button"
@@ -362,9 +360,7 @@ function CatalogModal({ onClose }: { onClose: () => void }) {
         <div className="mt-3 flex flex-col gap-4">
           {CATALOG.map((pack) => (
             <div key={pack.category}>
-              <h4 className="font-semibold text-base-content/50 text-xs uppercase tracking-wide">
-                {pack.category}
-              </h4>
+              <h4 className="font-semibold text-base-content/50 text-xs">{pack.category}</h4>
               <ul className="mt-1 flex flex-col divide-y divide-base-200">
                 {pack.items.map((item) => (
                   <li key={item.name} className="flex items-center justify-between gap-2 py-2">
@@ -387,7 +383,7 @@ function CatalogModal({ onClose }: { onClose: () => void }) {
                       }
                       className="btn btn-outline btn-xs"
                     >
-                      {added.has(item.name) ? 'Added ✓' : 'Add'}
+                      {added.has(item.name) ? 'Added' : 'Add'}
                     </button>
                   </li>
                 ))}
@@ -485,9 +481,7 @@ function ChoresSection({ view }: { view: HouseholdView }) {
       )}
       {groups.map(({ status, items }) => (
         <div key={status} className="flex flex-col gap-1">
-          <p className={`font-semibold text-xs uppercase tracking-wide ${STATUS_TEXT[status]}`}>
-            {STATUS_LABEL[status]}
-          </p>
+          <p className={`font-semibold text-xs ${STATUS_TEXT[status]}`}>{STATUS_LABEL[status]}</p>
           <ul className="flex flex-col divide-y divide-base-200">
             {items.map((occ) => (
               <OccurrenceRow
@@ -558,7 +552,7 @@ function ChoresSection({ view }: { view: HouseholdView }) {
             <span title="Each turn goes to the next household member">Rotate</span>
           </label>
         )}
-        <button type="submit" className="btn btn-neutral btn-sm">
+        <button type="submit" className="btn btn-primary btn-sm">
           Add chore
         </button>
       </form>
@@ -864,6 +858,17 @@ function parsePriceCents(value: string): number | undefined {
   return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) : undefined
 }
 
+/** Tidy a free-text quantity for display: "250g" → "250 g", "1l" → "1 L". Other text as-is. */
+function formatQuantity(raw: string): string {
+  const trimmed = raw.trim()
+  const match = trimmed.match(/^(\d+(?:[.,]\d+)?)\s*([a-zA-Z]+)$/)
+  const num = match?.[1]
+  const unit = match?.[2]
+  if (!num || !unit) return trimmed
+  const lower = unit.toLowerCase()
+  return `${num} ${lower === 'l' ? 'L' : lower}`
+}
+
 function ShoppingSection({ view }: { view: HouseholdView }) {
   const queryClient = useQueryClient()
   const [name, setName] = useState('')
@@ -934,14 +939,12 @@ function ShoppingSection({ view }: { view: HouseholdView }) {
     <Card title="Shopping list">
       {restock.length > 0 && (
         <div className="flex flex-col gap-1 rounded-box bg-base-200 p-2">
-          <p className="font-semibold text-base-content/60 text-xs uppercase tracking-wide">
-            Probably running low
-          </p>
+          <p className="font-semibold text-base-content/60 text-xs">Probably running low</p>
           {restock.map((item) => (
             <div key={item.itemId} className="flex items-center justify-between gap-2">
               <span className="flex flex-col">
                 <span className="font-medium text-sm">{item.name}</span>
-                <span className="text-base-content/50 text-xs">💡 {item.explanation}</span>
+                <span className="text-base-content/50 text-xs">{item.explanation}</span>
               </span>
               <button
                 type="button"
@@ -959,9 +962,7 @@ function ShoppingSection({ view }: { view: HouseholdView }) {
 
       {groups.map(({ category: groupName, items }) => (
         <div key={groupName} className="flex flex-col gap-1">
-          <p className="font-semibold text-base-content/50 text-xs uppercase tracking-wide">
-            {groupName}
-          </p>
+          <p className="font-semibold text-base-content/50 text-xs">{groupName}</p>
           <ul className="flex flex-col divide-y divide-base-200">
             {items.map((entry) => (
               <li key={entry.id} className="flex flex-col gap-1 py-2">
@@ -970,7 +971,10 @@ function ShoppingSection({ view }: { view: HouseholdView }) {
                     <span className="font-medium">
                       {entry.name}
                       {entry.quantity && (
-                        <span className="text-base-content/60"> · {entry.quantity}</span>
+                        <span className="text-base-content/60">
+                          {' '}
+                          · {formatQuantity(entry.quantity)}
+                        </span>
                       )}
                     </span>
                     <span className="text-base-content/50 text-xs">
@@ -988,18 +992,16 @@ function ShoppingSection({ view }: { view: HouseholdView }) {
                     <button
                       type="button"
                       onClick={() => (openId === entry.id ? closeDetail() : openDetail(entry.id))}
-                      aria-label={`Log price and store for ${entry.name}`}
-                      className="btn btn-square btn-ghost btn-sm"
+                      className="btn btn-ghost btn-sm"
                     >
-                      🧾
+                      Price
                     </button>
                     <button
                       type="button"
                       onClick={() => remove.mutate(entry.id)}
-                      aria-label={`Remove ${entry.name}`}
-                      className="btn btn-square btn-ghost btn-sm"
+                      className="btn btn-ghost btn-sm text-base-content/60"
                     >
-                      ✕
+                      Remove
                     </button>
                   </div>
                 </div>
@@ -1070,16 +1072,14 @@ function ShoppingSection({ view }: { view: HouseholdView }) {
           aria-label="Category"
           className="input input-bordered input-sm sm:w-28"
         />
-        <button type="submit" className="btn btn-neutral btn-sm">
+        <button type="submit" className="btn btn-primary btn-sm">
           Add
         </button>
       </form>
 
       {quickAdd.length > 0 && (
         <div className="flex flex-col gap-1">
-          <p className="font-semibold text-base-content/50 text-xs uppercase tracking-wide">
-            Quick add
-          </p>
+          <p className="font-semibold text-base-content/50 text-xs">Quick add</p>
           <div className="flex flex-wrap gap-1">
             {quickAdd.map((item: GroceryItem) => (
               <button
@@ -1310,7 +1310,7 @@ function MealsSection({ view }: { view: HouseholdView }) {
                 </span>
                 <span className="text-xs">
                   {recipe.missingCount === 0 ? (
-                    <span className="text-success">✓ have everything</span>
+                    <span className="text-success">Have everything</span>
                   ) : (
                     <span className="text-base-content/60">
                       needs {recipe.missingCount} item{recipe.missingCount === 1 ? '' : 's'}
@@ -1337,10 +1337,9 @@ function MealsSection({ view }: { view: HouseholdView }) {
                 <button
                   type="button"
                   onClick={() => remove.mutate(recipe.id)}
-                  aria-label={`Delete ${recipe.name}`}
-                  className="btn btn-square btn-ghost btn-sm"
+                  className="btn btn-ghost btn-sm text-base-content/60"
                 >
-                  ✕
+                  Delete
                 </button>
               </div>
             </li>
@@ -1357,9 +1356,7 @@ function MealsSection({ view }: { view: HouseholdView }) {
       >
         {editingId && (
           <div className="flex items-center justify-between">
-            <span className="font-semibold text-base-content/60 text-xs uppercase tracking-wide">
-              Editing recipe
-            </span>
+            <span className="font-semibold text-base-content/60 text-xs">Editing recipe</span>
             <button type="button" onClick={resetForm} className="btn btn-ghost btn-xs">
               Cancel
             </button>
@@ -1411,9 +1408,9 @@ function MealsSection({ view }: { view: HouseholdView }) {
                 type="button"
                 onClick={() => removeIngredientRow(row.id)}
                 aria-label={`Remove ingredient ${idx + 1}`}
-                className="btn btn-square btn-ghost btn-xs"
+                className="btn btn-ghost btn-xs text-base-content/60"
               >
-                ✕
+                Remove
               </button>
             </div>
           ))}
@@ -1454,7 +1451,7 @@ function MealsSection({ view }: { view: HouseholdView }) {
             </label>
           ))}
         </div>
-        <button type="submit" className="btn btn-neutral btn-sm w-fit">
+        <button type="submit" className="btn btn-primary btn-sm w-fit">
           {editingId ? 'Save changes' : 'Save recipe'}
         </button>
         {save.error && <p className="text-error text-xs">{errorMessage(save.error)}</p>}
@@ -1462,9 +1459,7 @@ function MealsSection({ view }: { view: HouseholdView }) {
 
       {history.length > 0 && (
         <div className="flex flex-col gap-1">
-          <p className="font-semibold text-base-content/50 text-xs uppercase tracking-wide">
-            Recently cooked
-          </p>
+          <p className="font-semibold text-base-content/50 text-xs">Recently cooked</p>
           <ul className="flex flex-col divide-y divide-base-200">
             {history.map((entry) => (
               <li key={entry.id} className="flex items-center justify-between gap-2 py-1.5">
