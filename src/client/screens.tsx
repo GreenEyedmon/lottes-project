@@ -41,6 +41,7 @@ import {
   skipOccurrence,
   suggestMeals,
   type TemporalStatus,
+  updateMyName,
   updateRecipe,
   updateSettings,
 } from './api.ts'
@@ -1485,17 +1486,23 @@ function MealsSection({ view }: { view: HouseholdView }) {
   )
 }
 
-function HouseholdHome({ view }: { view: HouseholdView }) {
+/** The dedicated Settings destination: your name, members, rooms, notifications, invite. */
+function SettingsSection({ view }: { view: HouseholdView }) {
   const queryClient = useQueryClient()
-  const [tab, setTab] = useState<'chores' | 'shopping' | 'meals'>('chores')
+  const [displayName, setDisplayName] = useState(view.me.displayName)
   const [roomName, setRoomName] = useState('')
   const [inviteLink, setInviteLink] = useState<string | null>(null)
+  const invalidateHousehold = () => queryClient.invalidateQueries({ queryKey: ['household'] })
 
+  const rename = useMutation({
+    mutationFn: () => updateMyName(displayName),
+    onSuccess: invalidateHousehold,
+  })
   const addRoomMutation = useMutation({
     mutationFn: () => addRoom(roomName),
     onSuccess: () => {
       setRoomName('')
-      queryClient.invalidateQueries({ queryKey: ['household'] })
+      invalidateHousehold()
     },
   })
   const inviteMutation = useMutation({
@@ -1504,46 +1511,157 @@ function HouseholdHome({ view }: { view: HouseholdView }) {
   })
 
   return (
+    <>
+      <Card title="Your name">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            rename.mutate()
+          }}
+          className="flex gap-2"
+        >
+          <input
+            required
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            aria-label="Your display name"
+            className="input input-bordered input-sm flex-1"
+          />
+          <button type="submit" className="btn btn-primary btn-sm">
+            {rename.isSuccess ? 'Saved' : 'Save'}
+          </button>
+        </form>
+        <p className="text-base-content/50 text-xs">
+          Shown to your household. Separate from your sign-in email.
+        </p>
+      </Card>
+
+      <Card title="Members">
+        <ul className="flex flex-col gap-1">
+          {view.members.map((member) => (
+            <li key={member.id} className="flex items-center gap-2">
+              <span className="font-medium">{member.displayName}</span>
+              <span className="badge badge-ghost badge-sm">{member.role}</span>
+            </li>
+          ))}
+        </ul>
+      </Card>
+
+      <Card title="Rooms">
+        {view.rooms.length === 0 ? (
+          <p className="text-base-content/50 text-sm">None yet.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {view.rooms.map((room) => (
+              <span key={room.id} className="badge badge-lg badge-outline">
+                {room.name}
+              </span>
+            ))}
+          </div>
+        )}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            addRoomMutation.mutate()
+          }}
+          className="flex gap-2"
+        >
+          <input
+            required
+            value={roomName}
+            onChange={(e) => setRoomName(e.target.value)}
+            placeholder="Kitchen"
+            aria-label="New room name"
+            className="input input-bordered input-sm flex-1"
+          />
+          <button type="submit" className="btn btn-primary btn-sm">
+            Add
+          </button>
+        </form>
+      </Card>
+
+      <NotificationsCard />
+
+      {view.me.role === 'owner' && <SettingsCard view={view} />}
+
+      {view.me.role === 'owner' && (
+        <Card title="Invite">
+          <button
+            type="button"
+            onClick={() => inviteMutation.mutate()}
+            className="btn btn-outline btn-sm w-fit"
+          >
+            Create invite link
+          </button>
+          {inviteLink && (
+            <div className="join w-full">
+              <input
+                readOnly
+                value={inviteLink}
+                aria-label="Invite link"
+                className="input input-bordered input-sm join-item flex-1 font-mono text-xs"
+              />
+              <button
+                type="button"
+                onClick={() => void navigator.clipboard?.writeText(inviteLink)}
+                className="btn btn-neutral btn-sm join-item"
+              >
+                Copy
+              </button>
+            </div>
+          )}
+        </Card>
+      )}
+    </>
+  )
+}
+
+function HouseholdHome({ view }: { view: HouseholdView }) {
+  const [tab, setTab] = useState<'chores' | 'shopping' | 'meals' | 'settings'>('chores')
+
+  const workspaces = [
+    { id: 'chores', label: 'Chores' },
+    { id: 'shopping', label: 'Shopping' },
+    { id: 'meals', label: 'Meals' },
+  ] as const
+
+  return (
     <div className="min-h-dvh bg-base-200">
       <div className="mx-auto flex max-w-lg flex-col gap-4 p-4">
         <header className="flex items-center justify-between py-2">
           <h1 className="font-bold text-2xl">{view.household.name}</h1>
-          <button
-            type="button"
-            onClick={() => {
-              void authClient.signOut().then(() => window.location.reload())
-            }}
-            className="btn btn-ghost btn-sm"
-          >
-            Sign out
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setTab('settings')}
+              className={`btn btn-ghost btn-sm ${tab === 'settings' ? 'btn-active' : ''}`}
+            >
+              Settings
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                void authClient.signOut().then(() => window.location.reload())
+              }}
+              className="btn btn-ghost btn-sm"
+            >
+              Sign out
+            </button>
+          </div>
         </header>
 
         <div role="tablist" className="tabs tabs-box">
-          <button
-            type="button"
-            role="tab"
-            onClick={() => setTab('chores')}
-            className={`tab flex-1 ${tab === 'chores' ? 'tab-active' : ''}`}
-          >
-            Chores
-          </button>
-          <button
-            type="button"
-            role="tab"
-            onClick={() => setTab('shopping')}
-            className={`tab flex-1 ${tab === 'shopping' ? 'tab-active' : ''}`}
-          >
-            Shopping
-          </button>
-          <button
-            type="button"
-            role="tab"
-            onClick={() => setTab('meals')}
-            className={`tab flex-1 ${tab === 'meals' ? 'tab-active' : ''}`}
-          >
-            Meals
-          </button>
+          {workspaces.map((w) => (
+            <button
+              key={w.id}
+              type="button"
+              role="tab"
+              onClick={() => setTab(w.id)}
+              className={`tab flex-1 ${tab === w.id ? 'tab-active' : ''}`}
+            >
+              {w.label}
+            </button>
+          ))}
         </div>
 
         {tab === 'chores' && (
@@ -1554,83 +1672,7 @@ function HouseholdHome({ view }: { view: HouseholdView }) {
         )}
         {tab === 'shopping' && <ShoppingSection view={view} />}
         {tab === 'meals' && <MealsSection view={view} />}
-
-        <Card title="Members">
-          <ul className="flex flex-col gap-1">
-            {view.members.map((member) => (
-              <li key={member.id} className="flex items-center gap-2">
-                <span className="font-medium">{member.displayName}</span>
-                <span className="badge badge-ghost badge-sm">{member.role}</span>
-              </li>
-            ))}
-          </ul>
-        </Card>
-
-        <Card title="Rooms">
-          {view.rooms.length === 0 ? (
-            <p className="text-base-content/50 text-sm">None yet.</p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {view.rooms.map((room) => (
-                <span key={room.id} className="badge badge-lg badge-outline">
-                  {room.name}
-                </span>
-              ))}
-            </div>
-          )}
-          <form
-            onSubmit={(e) => {
-              e.preventDefault()
-              addRoomMutation.mutate()
-            }}
-            className="flex gap-2"
-          >
-            <input
-              required
-              value={roomName}
-              onChange={(e) => setRoomName(e.target.value)}
-              placeholder="Kitchen"
-              aria-label="New room name"
-              className="input input-bordered input-sm flex-1"
-            />
-            <button type="submit" className="btn btn-neutral btn-sm">
-              Add
-            </button>
-          </form>
-        </Card>
-
-        <NotificationsCard />
-
-        {view.me.role === 'owner' && <SettingsCard view={view} />}
-
-        {view.me.role === 'owner' && (
-          <Card title="Invite">
-            <button
-              type="button"
-              onClick={() => inviteMutation.mutate()}
-              className="btn btn-outline btn-sm w-fit"
-            >
-              Create invite link
-            </button>
-            {inviteLink && (
-              <div className="join w-full">
-                <input
-                  readOnly
-                  value={inviteLink}
-                  aria-label="Invite link"
-                  className="input input-bordered input-sm join-item flex-1 font-mono text-xs"
-                />
-                <button
-                  type="button"
-                  onClick={() => void navigator.clipboard?.writeText(inviteLink)}
-                  className="btn btn-neutral btn-sm join-item"
-                >
-                  Copy
-                </button>
-              </div>
-            )}
-          </Card>
-        )}
+        {tab === 'settings' && <SettingsSection view={view} />}
       </div>
     </div>
   )
