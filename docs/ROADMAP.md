@@ -210,9 +210,9 @@ nutrition, quantity scaling.
 Minimal, deterministic, text-first, mobile-first. Scoped in
 [docs/design/ui-overhaul.md](design/ui-overhaul.md).
 
-- **(6a) Design-system foundation** — semantic color, button hierarchy, sentence-case
-  headings, unit normalization, mobile-first touch targets, text-first audit (remove
-  emoji-only affordances).
+- **(6a) ✅ Design-system foundation** — sentence-case headings, button hierarchy,
+  unit normalization, text-first audit (emoji-only affordances → text). Deeper per-screen
+  color/mobile continues through 6b–6d. — PR #25
 - **(6b) Settings section + member display names** — move notification prefs/quiet hours
   into a dedicated Settings area; let members rename themselves independent of email.
 - **(6c) Chores grouped by room** — assign a room per chore, group the list by room, remove
