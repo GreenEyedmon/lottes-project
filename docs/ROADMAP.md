@@ -213,8 +213,9 @@ Minimal, deterministic, text-first, mobile-first. Scoped in
 - **(6a) ✅ Design-system foundation** — sentence-case headings, button hierarchy,
   unit normalization, text-first audit (emoji-only affordances → text). Deeper per-screen
   color/mobile continues through 6b–6d. — PR #25
-- **(6b) Settings section + member display names** — move notification prefs/quiet hours
-  into a dedicated Settings area; let members rename themselves independent of email.
+- **(6b) ✅ Settings section + member display names** — dedicated Settings destination
+  (header link) holding notification prefs/quiet hours/members/rooms/invite; members rename
+  themselves independent of email. — PR #26
 - **(6c) Chores grouped by room** — assign a room per chore, group the list by room, remove
   the standalone Rooms card.
 - **(6d) Dashboard landing page** — prioritized overview (due today, overdue, shopping,
