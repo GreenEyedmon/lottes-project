@@ -216,8 +216,9 @@ Minimal, deterministic, text-first, mobile-first. Scoped in
 - **(6b) ✅ Settings section + member display names** — dedicated Settings destination
   (header link) holding notification prefs/quiet hours/members/rooms/invite; members rename
   themselves independent of email. — PR #26
-- **(6c) Chores grouped by room** — assign a room per chore, group the list by room, remove
-  the standalone Rooms card.
+- **(6c) ✅ Chores grouped by room** — room picker per chore; list groups by room with
+  status (Overdue/Today/Upcoming) nested inside; room-less → "Other"; room management moved
+  to Settings. — PR #27
 - **(6d) Dashboard landing page** — prioritized overview (due today, overdue, shopping,
   today's meal, activity, workload); every card navigates to its workspace.
 - **(6e) Meal → shopping pre-cook checklist** — choose which ingredients to add rather than
