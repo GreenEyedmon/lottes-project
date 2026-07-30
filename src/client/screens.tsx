@@ -22,6 +22,7 @@ import {
   dismissSuggestion,
   type GroceryItem,
   getCurrentHousehold,
+  getDashboard,
   getHistory,
   getShopping,
   type HistoryWindow,
@@ -1532,6 +1533,131 @@ function MealsSection({ view }: { view: HouseholdView }) {
   )
 }
 
+type Workspace = 'dashboard' | 'chores' | 'shopping' | 'meals' | 'settings'
+
+/** A whole-card button for the dashboard. Children must be phrasing content (spans). */
+function DashCard({
+  title,
+  onClick,
+  children,
+}: {
+  title: string
+  onClick: () => void
+  children: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="card w-full border border-base-300 bg-base-100 text-left shadow-sm transition hover:border-primary"
+    >
+      <span className="card-body gap-2 p-5">
+        <span className="font-semibold">{title}</span>
+        {children}
+      </span>
+    </button>
+  )
+}
+
+/** The landing overview. Prioritized, and every card opens its workspace. */
+function DashboardSection({ onNavigate }: { onNavigate: (tab: Workspace) => void }) {
+  const dashboard = useQuery({ queryKey: ['dashboard'], queryFn: getDashboard })
+  const d = dashboard.data
+
+  if (!d) {
+    return (
+      <Card title="Overview">
+        <p className="text-base-content/50 text-sm">Loading…</p>
+      </Card>
+    )
+  }
+
+  const money = (cents: number) => `€${(cents / 100).toFixed(2)}`
+  const plural = (n: number) => (n === 1 ? '' : 's')
+
+  return (
+    <div className="flex flex-col gap-3">
+      <DashCard title="Chores" onClick={() => onNavigate('chores')}>
+        {d.chores.overdue === 0 && d.chores.dueToday === 0 ? (
+          <span className="text-success">All caught up</span>
+        ) : (
+          <span className="flex flex-wrap gap-x-4">
+            {d.chores.overdue > 0 && (
+              <span className="font-medium text-error">{d.chores.overdue} overdue</span>
+            )}
+            {d.chores.dueToday > 0 && (
+              <span className="font-medium text-warning">{d.chores.dueToday} due today</span>
+            )}
+          </span>
+        )}
+        {d.chores.upcoming > 0 && (
+          <span className="text-base-content/50 text-sm">{d.chores.upcoming} upcoming</span>
+        )}
+      </DashCard>
+
+      <DashCard title="Shopping" onClick={() => onNavigate('shopping')}>
+        {d.shopping.itemCount === 0 ? (
+          <span className="text-base-content/50">List is empty</span>
+        ) : (
+          <span>
+            {d.shopping.itemCount} item{plural(d.shopping.itemCount)}
+            {d.shopping.estimatedCents != null && (
+              <span className="text-base-content/50">
+                {' '}
+                · est. {money(d.shopping.estimatedCents)}
+              </span>
+            )}
+          </span>
+        )}
+      </DashCard>
+
+      <DashCard title="Tonight's meal" onClick={() => onNavigate('meals')}>
+        {d.meal ? (
+          <span className="flex flex-col">
+            <span className="font-medium">{d.meal.name}</span>
+            <span className="text-base-content/50 text-sm">
+              {d.meal.missingCount === 0
+                ? 'You have everything'
+                : `Needs ${d.meal.missingCount} item${plural(d.meal.missingCount)}`}
+            </span>
+          </span>
+        ) : (
+          <span className="text-base-content/50">No recipes yet</span>
+        )}
+      </DashCard>
+
+      <DashCard title="Recent activity" onClick={() => onNavigate('chores')}>
+        {d.activity.length === 0 ? (
+          <span className="text-base-content/50 text-sm">Nothing yet</span>
+        ) : (
+          <span className="flex flex-col gap-1">
+            {d.activity.map((a) => (
+              <span key={a.id} className="text-sm">
+                {a.text} <span className="text-base-content/50">{timeAgo(a.at)}</span>
+              </span>
+            ))}
+          </span>
+        )}
+      </DashCard>
+
+      <DashCard title="This week" onClick={() => onNavigate('chores')}>
+        {d.workload.length === 0 ? (
+          <span className="text-base-content/50 text-sm">No completions yet</span>
+        ) : (
+          <span className="flex flex-col gap-1">
+            {d.workload.map((w) => (
+              <span key={w.memberId} className="flex justify-between text-sm">
+                <span>{w.name}</span>
+                <span className="text-base-content/60">{w.completed}</span>
+              </span>
+            ))}
+          </span>
+        )}
+      </DashCard>
+    </div>
+  )
+}
+
 /** The dedicated Settings destination: your name, members, rooms, notifications, invite. */
 function SettingsSection({ view }: { view: HouseholdView }) {
   const queryClient = useQueryClient()
@@ -1663,16 +1789,17 @@ function SettingsSection({ view }: { view: HouseholdView }) {
 }
 
 function HouseholdHome({ view }: { view: HouseholdView }) {
-  const [tab, setTab] = useState<'chores' | 'shopping' | 'meals' | 'settings'>('chores')
+  const [tab, setTab] = useState<Workspace>('dashboard')
 
   const workspaces = [
+    { id: 'dashboard', label: 'Home' },
     { id: 'chores', label: 'Chores' },
     { id: 'shopping', label: 'Shopping' },
     { id: 'meals', label: 'Meals' },
   ] as const
 
   return (
-    <div className="min-h-dvh bg-base-200">
+    <div className="min-h-dvh bg-base-200 pb-20">
       <div className="mx-auto flex max-w-lg flex-col gap-4 p-4">
         <header className="flex items-center justify-between py-2">
           <h1 className="font-bold text-2xl">{view.household.name}</h1>
@@ -1696,20 +1823,7 @@ function HouseholdHome({ view }: { view: HouseholdView }) {
           </div>
         </header>
 
-        <div role="tablist" className="tabs tabs-box">
-          {workspaces.map((w) => (
-            <button
-              key={w.id}
-              type="button"
-              role="tab"
-              onClick={() => setTab(w.id)}
-              className={`tab flex-1 ${tab === w.id ? 'tab-active' : ''}`}
-            >
-              {w.label}
-            </button>
-          ))}
-        </div>
-
+        {tab === 'dashboard' && <DashboardSection onNavigate={setTab} />}
         {tab === 'chores' && (
           <>
             <ChoresSection view={view} />
@@ -1720,6 +1834,23 @@ function HouseholdHome({ view }: { view: HouseholdView }) {
         {tab === 'meals' && <MealsSection view={view} />}
         {tab === 'settings' && <SettingsSection view={view} />}
       </div>
+
+      <nav className="fixed inset-x-0 bottom-0 z-10 border-base-300 border-t bg-base-100">
+        <div className="mx-auto flex max-w-lg">
+          {workspaces.map((w) => (
+            <button
+              key={w.id}
+              type="button"
+              onClick={() => setTab(w.id)}
+              className={`flex-1 py-3 text-center text-sm ${
+                tab === w.id ? 'font-semibold text-primary' : 'text-base-content/60'
+              }`}
+            >
+              {w.label}
+            </button>
+          ))}
+        </div>
+      </nav>
     </div>
   )
 }

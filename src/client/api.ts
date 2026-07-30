@@ -172,6 +172,18 @@ export function getHistory(window: HistoryWindow): Promise<HistoryView> {
   return request(`/api/history?window=${window}`)
 }
 
+export interface DashboardView {
+  chores: { overdue: number; dueToday: number; upcoming: number }
+  shopping: { itemCount: number; estimatedCents: number | null }
+  meal: { id: string; name: string; missingCount: number } | null
+  activity: { id: string; text: string; at: number }[]
+  workload: { memberId: string; name: string; completed: number }[]
+}
+
+export function getDashboard(): Promise<DashboardView> {
+  return request('/api/dashboard')
+}
+
 export interface SuggestionView {
   id: string
   templateId: string

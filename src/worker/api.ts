@@ -21,6 +21,7 @@ import {
   postponeOccurrence,
   skipOccurrence,
 } from './chores.ts'
+import { getDashboard } from './dashboard.ts'
 import { getDb } from './db/index.ts'
 import { households, invites, members, pushSubscriptions, rooms } from './db/schema.ts'
 import {
@@ -468,6 +469,19 @@ api.get('/history', async (c) => {
     Date.now(),
   )
   return c.json(history)
+})
+
+api.get('/dashboard', async (c) => {
+  const user = c.get('user')
+  const ctx = await callerContext(c.env, user.id)
+  if (!ctx) return c.json({ error: 'no household' }, 404)
+  const dashboard = await getDashboard(
+    getDb(c.env.DB),
+    ctx.household.id,
+    ctx.household.ianaTimeZone,
+    Date.now(),
+  )
+  return c.json(dashboard)
 })
 
 // --- Adaptive-scheduling suggestions (Phase 3a) ---
