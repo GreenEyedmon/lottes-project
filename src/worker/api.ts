@@ -662,12 +662,14 @@ api.post('/meals/recipes/:id/cook', async (c) => {
   const user = c.get('user')
   const ctx = await callerContext(c.env, user.id)
   if (!ctx) return c.json({ error: 'no household' }, 404)
+  const body = await c.req.json<{ itemIds?: string[] }>().catch((): { itemIds?: string[] } => ({}))
   const result = await cookRecipe(
     getDb(c.env.DB),
     ctx.household.id,
     ctx.member.id,
     Date.now(),
     c.req.param('id'),
+    Array.isArray(body.itemIds) ? body.itemIds : undefined,
   )
   if (result === 'not-found') return c.json({ error: 'not found' }, 404)
   return c.json(result)

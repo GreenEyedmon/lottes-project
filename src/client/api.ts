@@ -305,7 +305,12 @@ export function deleteRecipe(id: string): Promise<{ ok: boolean }> {
   return request(`/api/meals/recipes/${id}/delete`, { method: 'POST' })
 }
 
-export interface SuggestedMeal extends Recipe {
+export interface SuggestedIngredient extends RecipeIngredient {
+  missing: boolean
+}
+
+export interface SuggestedMeal extends Omit<Recipe, 'ingredients'> {
+  ingredients: SuggestedIngredient[]
   missingCount: number
 }
 
@@ -323,8 +328,11 @@ export async function suggestMeals(prefs: MealPrefs = {}): Promise<SuggestedMeal
   return data.meals
 }
 
-export function cookRecipe(id: string): Promise<{ added: number }> {
-  return request(`/api/meals/recipes/${id}/cook`, { method: 'POST' })
+export function cookRecipe(id: string, itemIds?: string[]): Promise<{ added: number }> {
+  return request(`/api/meals/recipes/${id}/cook`, {
+    method: 'POST',
+    body: JSON.stringify(itemIds ? { itemIds } : {}),
+  })
 }
 
 export function updateRecipe(id: string, input: NewRecipeInput): Promise<{ ok: boolean }> {
