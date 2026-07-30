@@ -40,6 +40,7 @@ import {
   choreTemplates,
   completionEvents,
   members,
+  rooms,
 } from './db/schema.ts'
 
 const HORIZON_DAYS = 28
@@ -186,6 +187,7 @@ export interface OccurrenceView {
   temporalStatus: TemporalStatus
   responsibleId: string | null
   templateId: string | null
+  roomName: string | null
 }
 
 export async function listOpenOccurrences(
@@ -198,19 +200,22 @@ export async function listOpenOccurrences(
     .select({
       occurrence: choreOccurrences,
       templateName: choreTemplates.name,
+      roomName: rooms.name,
     })
     .from(choreOccurrences)
     .leftJoin(choreTemplates, eq(choreOccurrences.templateId, choreTemplates.id))
+    .leftJoin(rooms, eq(choreTemplates.roomId, rooms.id))
     .where(
       and(eq(choreOccurrences.householdId, householdId), eq(choreOccurrences.state, 'scheduled')),
     )
-  return rows.map(({ occurrence, templateName }) => ({
+  return rows.map(({ occurrence, templateName, roomName }) => ({
     id: occurrence.id,
     name: occurrence.title ?? templateName ?? 'Chore',
     dueDate: occurrence.dueDate,
     temporalStatus: resolveTemporalStatus(toEngineOccurrence(occurrence), { now, timeZone }),
     responsibleId: occurrence.responsibleId,
     templateId: occurrence.templateId,
+    roomName: roomName ?? null,
   }))
 }
 

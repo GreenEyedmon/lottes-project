@@ -411,6 +411,7 @@ function ChoresSection({ view }: { view: HouseholdView }) {
   const [presetIndex, setPresetIndex] = useState(0)
   const [rotate, setRotate] = useState(false)
   const [missedPolicy, setMissedPolicy] = useState<MissedPolicy>('collapse')
+  const [roomId, setRoomId] = useState('')
   const [taskTitle, setTaskTitle] = useState('')
   const [catalogOpen, setCatalogOpen] = useState(false)
   const occurrences = useQuery({ queryKey: ['occurrences'], queryFn: listOccurrences })
@@ -440,11 +441,16 @@ function ChoresSection({ view }: { view: HouseholdView }) {
   }
   const addChore = useMutation({
     mutationFn: () =>
-      createChore(name, RECURRENCE_PRESETS[presetIndex]?.rule ?? {}, { rotate, missedPolicy }),
+      createChore(name, RECURRENCE_PRESETS[presetIndex]?.rule ?? {}, {
+        rotate,
+        missedPolicy,
+        roomId: roomId || undefined,
+      }),
     onSuccess: () => {
       setName('')
       setRotate(false)
       setMissedPolicy('collapse')
+      // keep the selected room so several chores can be added to it in a row
       invalidate()
     },
   })
@@ -459,16 +465,32 @@ function ChoresSection({ view }: { view: HouseholdView }) {
   const memberName = (id: string): string =>
     view.members.find((m) => m.id === id)?.displayName ?? 'Someone'
 
-  const groups = GROUP_ORDER.map((status) => ({
-    status,
-    items: (occurrences.data ?? [])
-      .filter((o) => o.temporalStatus === status)
-      .sort((a, b) => a.dueDate.localeCompare(b.dueDate)),
-  })).filter((group) => group.items.length > 0)
+  const occs = occurrences.data ?? []
+  const statusGroups = (list: OccurrenceView[]) =>
+    GROUP_ORDER.map((status) => ({
+      status,
+      items: list
+        .filter((o) => o.temporalStatus === status)
+        .sort((a, b) => a.dueDate.localeCompare(b.dueDate)),
+    })).filter((group) => group.items.length > 0)
+
+  // Group by room (outer), then by status (inner). "Other" holds room-less chores/tasks.
+  const roomBuckets = new Map<string, OccurrenceView[]>()
+  for (const o of occs) {
+    const key = o.roomName ?? ''
+    const list = roomBuckets.get(key) ?? []
+    list.push(o)
+    roomBuckets.set(key, list)
+  }
+  const orderedRooms = view.rooms.map((r) => r.name).filter((n) => roomBuckets.has(n))
+  const leftoverRooms = [...roomBuckets.keys()].filter((k) => k !== '' && !orderedRooms.includes(k))
+  const roomKeys = [...orderedRooms, ...leftoverRooms, ...(roomBuckets.has('') ? [''] : [])]
+  // Only show room headings once at least one chore is actually assigned to a room.
+  const showRoomHeadings = roomKeys.some((k) => k !== '')
 
   return (
     <Card title="Chores & tasks">
-      {groups.length === 0 && (
+      {occs.length === 0 && (
         <div className="flex flex-col items-start gap-2">
           <p className="text-base-content/50 text-sm">Nothing scheduled yet.</p>
           <button
@@ -480,25 +502,34 @@ function ChoresSection({ view }: { view: HouseholdView }) {
           </button>
         </div>
       )}
-      {groups.map(({ status, items }) => (
-        <div key={status} className="flex flex-col gap-1">
-          <p className={`font-semibold text-xs ${STATUS_TEXT[status]}`}>{STATUS_LABEL[status]}</p>
-          <ul className="flex flex-col divide-y divide-base-200">
-            {items.map((occ) => (
-              <OccurrenceRow
-                key={occ.id}
-                occ={occ}
-                memberName={memberName}
-                suggestions={occ.templateId ? suggestionsByTemplate.get(occ.templateId) : undefined}
-                onComplete={(id) => complete.mutate(id)}
-                onSkip={(id) => skip.mutate(id)}
-                onClaim={(id) => claim.mutate(id)}
-                onPostpone={(args) => postpone.mutate(args)}
-                onAccept={(id) => accept.mutate(id)}
-                onDismiss={(id) => dismiss.mutate(id)}
-              />
-            ))}
-          </ul>
+      {roomKeys.map((roomKey) => (
+        <div key={roomKey || '__other'} className="flex flex-col gap-2">
+          {showRoomHeadings && <h3 className="font-semibold">{roomKey || 'Other'}</h3>}
+          {statusGroups(roomBuckets.get(roomKey) ?? []).map(({ status, items }) => (
+            <div key={status} className="flex flex-col gap-1">
+              <p className={`font-semibold text-xs ${STATUS_TEXT[status]}`}>
+                {STATUS_LABEL[status]}
+              </p>
+              <ul className="flex flex-col divide-y divide-base-200">
+                {items.map((occ) => (
+                  <OccurrenceRow
+                    key={occ.id}
+                    occ={occ}
+                    memberName={memberName}
+                    suggestions={
+                      occ.templateId ? suggestionsByTemplate.get(occ.templateId) : undefined
+                    }
+                    onComplete={(id) => complete.mutate(id)}
+                    onSkip={(id) => skip.mutate(id)}
+                    onClaim={(id) => claim.mutate(id)}
+                    onPostpone={(args) => postpone.mutate(args)}
+                    onAccept={(id) => accept.mutate(id)}
+                    onDismiss={(id) => dismiss.mutate(id)}
+                  />
+                ))}
+              </ul>
+            </div>
+          ))}
         </div>
       ))}
 
@@ -542,6 +573,21 @@ function ChoresSection({ view }: { view: HouseholdView }) {
             </option>
           ))}
         </select>
+        {view.rooms.length > 0 && (
+          <select
+            value={roomId}
+            onChange={(e) => setRoomId(e.target.value)}
+            aria-label="Room"
+            className="select select-bordered select-sm"
+          >
+            <option value="">No room</option>
+            {view.rooms.map((room) => (
+              <option key={room.id} value={room.id}>
+                {room.name}
+              </option>
+            ))}
+          </select>
+        )}
         {view.members.length > 1 && (
           <label className="label cursor-pointer gap-2 text-sm">
             <input
