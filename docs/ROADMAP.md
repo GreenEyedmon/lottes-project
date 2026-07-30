@@ -204,6 +204,35 @@ nutrition, quantity scaling.
 
 ---
 
+### Phase 6 — UI/UX overhaul  *(household design direction)*
+
+**Goal:** Refine presentation, navigation, and workflows without adding domain features.
+Minimal, deterministic, text-first, mobile-first. Scoped in
+[docs/design/ui-overhaul.md](design/ui-overhaul.md).
+
+- **(6a) Design-system foundation** — semantic color, button hierarchy, sentence-case
+  headings, unit normalization, mobile-first touch targets, text-first audit (remove
+  emoji-only affordances).
+- **(6b) Settings section + member display names** — move notification prefs/quiet hours
+  into a dedicated Settings area; let members rename themselves independent of email.
+- **(6c) Chores grouped by room** — assign a room per chore, group the list by room, remove
+  the standalone Rooms card.
+- **(6d) Dashboard landing page** — prioritized overview (due today, overdue, shopping,
+  today's meal, activity, workload); every card navigates to its workspace.
+- **(6e) Meal → shopping pre-cook checklist** — choose which ingredients to add rather than
+  auto-adding all missing.
+- **(6f) Browse recipes catalog** — built-in recipe catalog with one-tap add (mirrors chores).
+- **(6g) Workload visualization options** — mockups to choose from, then implement the pick.
+- Item 5 (group shopping by category) already delivered in Phase 4c.
+
+Deferred: microinteractions/animations. Rejected: layout re-centering, extra whitespace,
+icon/emoji-primary navigation, emojis on meals, icon-based room identification.
+
+**Exit:** the household lands on a useful Dashboard; color and layout communicate state
+clearly; settings are separate; mobile is first-class — all text-first.
+
+---
+
 ## Deliberately deferred (from the spec)
 
 Not built in any phase above until explicitly revisited: AI-generated chore schedules,
