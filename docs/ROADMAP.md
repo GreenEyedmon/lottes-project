@@ -223,8 +223,8 @@ Minimal, deterministic, text-first, mobile-first. Scoped in
   (chores due/overdue, shopping + est. total, top meal suggestion, activity, workload);
   bottom tab bar (Home/Chores/Shopping/Meals), Settings via header; `/api/dashboard`
   aggregator. — PR #28
-- **(6e) Meal → shopping pre-cook checklist** — choose which ingredients to add rather than
-  auto-adding all missing.
+- **(6e) ✅ Meal → shopping pre-cook checklist** — Cook opens a checklist (missing pre-
+  checked, staples/have-it unchecked); only the chosen items are added. — PR #29
 - **(6f) Browse recipes catalog** — built-in recipe catalog with one-tap add (mirrors chores).
 - **(6g) Workload visualization options** — mockups to choose from, then implement the pick.
 - Item 5 (group shopping by category) already delivered in Phase 4c.
