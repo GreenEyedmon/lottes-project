@@ -68,6 +68,7 @@ export interface OccurrenceView {
   temporalStatus: TemporalStatus
   responsibleId: string | null
   templateId: string | null
+  roomName: string | null
 }
 
 export async function listOccurrences(): Promise<OccurrenceView[]> {
@@ -84,7 +85,7 @@ export type MissedPolicy = 'collapse' | 'keep' | 'expire'
 export function createChore(
   name: string,
   recurrence: Record<string, unknown>,
-  options: { rotate?: boolean; missedPolicy?: MissedPolicy } = {},
+  options: { rotate?: boolean; missedPolicy?: MissedPolicy; roomId?: string } = {},
 ): Promise<{ id: string }> {
   return request('/api/templates', {
     method: 'POST',
