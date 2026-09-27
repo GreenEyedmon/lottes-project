@@ -140,7 +140,7 @@ export async function addToList(
       .limit(1)
     if (!item) return 'invalid'
   } else {
-    if (!input.name || !input.name.trim()) return 'invalid'
+    if (!input.name?.trim()) return 'invalid'
     itemId = await ensureItem(db, householdId, input.name, input, now)
   }
 

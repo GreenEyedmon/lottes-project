@@ -365,7 +365,7 @@ async function followUpWrites(
     .from(choreTemplates)
     .where(eq(choreTemplates.id, templateId))
     .limit(1)
-  if (!templateRow || templateRow.status !== 'active') return []
+  if (templateRow?.status !== 'active') return []
   const existing = (
     await db.select().from(choreOccurrences).where(eq(choreOccurrences.templateId, templateId))
   )
